@@ -45,6 +45,7 @@ from database.models.sys.notice import SysNotice
 from database.models.sys.notice_read import SysNoticeRead
 from database.models.sys.login_log import SysLoginLog
 from database.models.business.user import AppUser
+from database.models.business.news import BusinessNews, BusinessNewsSyncLog
 from database.models.sys.scheduled_task import SysScheduledTask
 from database.models.sys.task_log import SysScheduledTaskLog
 

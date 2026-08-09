@@ -113,6 +113,10 @@ class CustomErrorCode(CustomCodeBase):
     MERCHANT_NOT_FOUND = (11028, "error.merchant.not_found")
     MERCHANT_CODE_EXIST = (11029, "error.merchant.code_exist")
     MERCHANT_APP_ID_CONFLICT = (11030, "error.merchant.app_id_conflict")
+    # 新闻聚合 10701-10800
+    NEWS_NOT_FOUND = (10701, "error.news.not_found")
+    NEWS_SYNC_FAILED = (10702, "error.news.sync_failed")
+
 @dataclass
 class CustomResponse:
     """

@@ -400,6 +400,7 @@ const local: App.I18n.Schema = {
     'log_online-user': '在线用户',
     'log_operation-log': '操作日志',
     monitor: '监控仪表盘',
+    news: '资讯聚合',
     about: '关于我们',
     demo: '示例',
     demo_upload: '上传演示',
@@ -1147,6 +1148,18 @@ const local: App.I18n.Schema = {
           username: '请输入用户名',
           ip: '请输入IP地址'
         }
+      }
+    },
+    news: {
+      title: '资讯聚合',
+      source: '来源',
+      summary: '摘要',
+      publishedAt: '发布时间',
+      dateRange: '时间范围',
+      allSources: '全部来源',
+      viewOriginal: '查看原文',
+      form: {
+        keyword: '请输入标题关键词'
       }
     }
   },

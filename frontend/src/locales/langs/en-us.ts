@@ -404,6 +404,7 @@ const local: App.I18n.Schema = {
     'log_online-user': 'Online Users',
     'log_operation-log': 'Operation Log',
     monitor: 'Monitor Dashboard',
+    news: 'News',
     about: 'About',
     demo: 'Example',
     demo_upload: 'Upload Demo',
@@ -1154,6 +1155,18 @@ const local: App.I18n.Schema = {
           username: 'Enter username',
           ip: 'Enter IP address'
         }
+      }
+    },
+    news: {
+      title: 'News Aggregation',
+      source: 'Source',
+      summary: 'Summary',
+      publishedAt: 'Published At',
+      dateRange: 'Date Range',
+      allSources: 'All Sources',
+      viewOriginal: 'View Original',
+      form: {
+        keyword: 'Enter title keyword'
       }
     }
   },

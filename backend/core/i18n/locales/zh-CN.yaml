@@ -100,6 +100,10 @@ error:
   notice:
     not_found: "通知不存在"
     already_published: "通知已发布，不可编辑"
+  news:
+    not_found: "新闻不存在 (id={id})"
+    sync_failed: "新闻同步失败"
+
   open_api:
     missing_header: "缺少必要的签名请求头"
     timestamp_expired: "请求时间戳超出允许范围"

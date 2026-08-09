@@ -334,6 +334,17 @@ export const generatedRoutes: GeneratedRoute[] = [
     }
   },
   {
+    name: 'news',
+    path: '/news',
+    component: 'layout.base$view.news',
+    meta: {
+      title: 'news',
+      i18nKey: 'route.news',
+      icon: 'mdi:newspaper-variant',
+      order: 5
+    }
+  },
+  {
     name: 'scheduler',
     path: '/scheduler',
     component: 'layout.base',

@@ -49,6 +49,7 @@ declare module "@elegant-router/types" {
     "merchant-open_merchant": "/merchant-open/merchant";
     "merchant-open_openapi-log": "/merchant-open/openapi-log";
     "monitor": "/monitor";
+    "news": "/news";
     "scheduler": "/scheduler";
     "scheduler_log": "/scheduler/log";
     "scheduler_task": "/scheduler/task";
@@ -97,6 +98,7 @@ declare module "@elegant-router/types" {
     | "manage"
     | "merchant-open"
     | "monitor"
+    | "news"
     | "scheduler"
   >;
 
@@ -141,6 +143,7 @@ declare module "@elegant-router/types" {
     | "merchant-open_merchant"
     | "merchant-open_openapi-log"
     | "monitor"
+    | "news"
     | "scheduler_log"
     | "scheduler_task"
   >;

@@ -42,6 +42,7 @@ export const views: Record<LastLevelRouteKey, RouteComponent | (() => Promise<Ro
   "merchant-open_merchant": () => import("@/views/merchant-open/merchant/index.vue"),
   "merchant-open_openapi-log": () => import("@/views/merchant-open/openapi-log/index.vue"),
   monitor: () => import("@/views/monitor/index.vue"),
+  news: () => import("@/views/news/index.vue"),
   scheduler_log: () => import("@/views/scheduler/log/index.vue"),
   scheduler_task: () => import("@/views/scheduler/task/index.vue"),
 };

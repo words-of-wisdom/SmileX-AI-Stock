@@ -195,6 +195,7 @@ const routeMap: RouteMap = {
   "merchant-open_merchant": "/merchant-open/merchant",
   "merchant-open_openapi-log": "/merchant-open/openapi-log",
   "monitor": "/monitor",
+  "news": "/news",
   "scheduler": "/scheduler",
   "scheduler_log": "/scheduler/log",
   "scheduler_task": "/scheduler/task"

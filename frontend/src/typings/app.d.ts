@@ -1293,6 +1293,18 @@ declare namespace App {
             };
           };
         };
+        news: {
+          title: string;
+          source: string;
+          summary: string;
+          publishedAt: string;
+          dateRange: string;
+          allSources: string;
+          viewOriginal: string;
+          form: {
+            keyword: string;
+          };
+        };
       };
       form: {
         required: string;

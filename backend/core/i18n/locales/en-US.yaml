@@ -93,6 +93,10 @@ error:
   notice:
     not_found: "Notice not found"
     already_published: "Notice has been published and cannot be edited"
+  news:
+    not_found: "News not found (id={id})"
+    sync_failed: "News sync failed"
+
   open_api:
     missing_header: "Missing required signature header"
     timestamp_expired: "Request timestamp is out of the allowed range"

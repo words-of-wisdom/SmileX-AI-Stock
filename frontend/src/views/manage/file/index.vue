@@ -156,17 +156,17 @@ function handlePreview(row: Api.FileManage.FileListItem) {
 }
 
 async function handleDownload(fileId: number, fileName: string) {
-  try {
-    const blob = await fetchDownloadFile(fileId);
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = fileName;
-    link.click();
-    URL.revokeObjectURL(url);
-  } catch {
+  const { data, error } = await fetchDownloadFile(fileId);
+  if (error || !data) {
     message.error($t('common.loadDataFailed'));
+    return;
   }
+  const url = URL.createObjectURL(data);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = fileName;
+  link.click();
+  URL.revokeObjectURL(url);
 }
 
 async function handleDelete(fileId: number) {
