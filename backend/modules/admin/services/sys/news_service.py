@@ -5,15 +5,18 @@
 新闻聚合读服务
 """
 import logging
-from datetime import datetime, timezone
+from datetime import datetime
+from datetime import timezone as datetime_timezone
 
 from sqlalchemy import select, and_, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database.models.business.news import BusinessNews
+from database.utils.timezone import timezone
 from core.exception.errors import NotFoundError
 from core.i18n import t
 from modules.admin.schemas.sys.news import NewsQueryParams, NewsSourceItem
+from modules.admin.services.sys.news_fetcher import NEWS_SOURCES
 
 logger = logging.getLogger(__name__)
 
@@ -30,22 +33,40 @@ class NewsService:
             conditions.append(BusinessNews.title.like(f"%{query.keyword}%"))
         if query.source:
             conditions.append(BusinessNews.source == query.source)
+        elif query.group:
+            source_keys = [s["key"] for s in NEWS_SOURCES if s.get("group") == query.group]
+            if source_keys:
+                conditions.append(BusinessNews.source.in_(source_keys))
         if query.start_time:
             try:
                 dt = datetime.fromisoformat(query.start_time)
-                start = dt.astimezone(timezone.utc) if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+                start = dt.astimezone(datetime_timezone.utc) if dt.tzinfo else dt.replace(tzinfo=datetime_timezone.utc)
                 conditions.append(BusinessNews.published_at >= start)
             except ValueError:
                 pass
         if query.end_time:
             try:
                 dt = datetime.fromisoformat(query.end_time)
-                end = dt.astimezone(timezone.utc) if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+                end = dt.astimezone(datetime_timezone.utc) if dt.tzinfo else dt.replace(tzinfo=datetime_timezone.utc)
                 conditions.append(BusinessNews.published_at <= end)
             except ValueError:
                 pass
 
-        base_query = select(BusinessNews).where(and_(*conditions))
+        # 始终按标题去重：row_number 取每组最优行（优先 published_at 非空 + 最新 id）
+        rn = func.row_number().over(
+            partition_by=BusinessNews.title,
+            order_by=[BusinessNews.published_at.desc().nullslast(), BusinessNews.id.desc()],
+        ).label('rn')
+        best_ids = (
+            select(BusinessNews.id)
+            .add_columns(rn)
+            .where(and_(*conditions))
+            .subquery()
+        )
+        base_query = (
+            select(BusinessNews)
+            .where(BusinessNews.id.in_(select(best_ids.c.id).where(best_ids.c.rn == 1)))
+        )
         base_query = base_query.order_by(BusinessNews.published_at.desc().nullslast())
         return base_query
 
@@ -65,18 +86,24 @@ class NewsService:
 
     @staticmethod
     async def get_source_stats(db: AsyncSession) -> list[NewsSourceItem]:
-        """按源统计新闻数量（供前端源侧栏展示）"""
+        """按源统计新闻数量，以注册表为准（无数据的源也展示 count=0）"""
         result = await db.execute(
             select(
                 BusinessNews.source,
-                func.max(BusinessNews.source_name).label("source_name"),
                 func.count(BusinessNews.id).label("cnt"),
             )
-            .where(BusinessNews.deleted_at.is_(None))
+            .where(
+                BusinessNews.deleted_at.is_(None),
+            )
             .group_by(BusinessNews.source)
         )
-        rows = result.all()
+        counts = {row.source: row.cnt for row in result.all()}
         return [
-            NewsSourceItem(source=row.source, source_name=row.source_name, count=row.cnt)
-            for row in rows
+            NewsSourceItem(
+                source=s["key"],
+                source_name=s["name"],
+                group=s.get("group", ""),
+                count=counts.get(s["key"], 0),
+            )
+            for s in NEWS_SOURCES
         ]

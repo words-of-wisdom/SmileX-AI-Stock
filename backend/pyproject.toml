@@ -35,6 +35,7 @@ dependencies = [
     "filetype>=1.2.0",
     "pyyaml>=6.0",
     "greenlet>=3.3.0",
+    "akshare>=1.18.83",
 ]
 
 [tool.uv.workspace]

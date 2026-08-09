@@ -1301,13 +1301,14 @@ declare namespace App {
           dateRange: string;
           allSources: string;
           viewOriginal: string;
-          form: {
-            keyword: string;
-          };
-        };
-      };
-      form: {
-        required: string;
+         form: {
+           keyword: string;
+            source: string;
+         };
+       };
+     };
+     form: {
+       required: string;
         userName: FormMsg;
         phone: FormMsg;
         pwd: FormMsg;

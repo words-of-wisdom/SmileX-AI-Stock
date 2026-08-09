@@ -3,7 +3,7 @@
 
 """
 新闻聚合抓取层
-统一封装 16 个新闻源的抓取逻辑，返回标准化的 dict 列表。
+统一封装新闻源的抓取逻辑，返回标准化的 dict 列表。
 每个 dict 包含：title / url / summary / content / source / source_name / author / raw_time
 """
 import asyncio
@@ -107,20 +107,34 @@ def _strip_html(text: str | None) -> str | None:
     return re.sub(r"<[^>]+>", "", text).strip() or None
 
 
+def _safe_json(resp) -> dict:
+    """安全解析响应 JSON，解析失败或非对象时回退为空 dict。"""
+    try:
+        data = resp.json()
+        return data if isinstance(data, dict) else {}
+    except Exception:  # noqa: BLE001
+        return {}
+
+
 def _item(title, url, source, source_name, summary=None, content=None, author=None, raw_time=None) -> dict:
     """构造标准化新闻 dict"""
     if not title or not url:
         return {}
     return {
-        "title": _strip_html(title) or title,
-        "url": url,
+        "title": (_strip_html(title) or title)[:500],
+        "url": url[:1000],
         "summary": _strip_html(summary)[:1000] if summary else None,
         "content": content,
         "source": source,
-        "source_name": source_name,
-        "author": author,
-        "raw_time": raw_time,
+        "source_name": source_name[:100],
+        "author": author[:100] if author else None,
+        "raw_time": raw_time[:50] if raw_time else None,
     }
+
+
+def _req_trace() -> str:
+    """生成东方财富 API 所需的 req_trace 参数"""
+    return str(int(datetime.now().timestamp() * 1000))
 
 
 # ================================================================
@@ -128,17 +142,20 @@ def _item(title, url, source, source_name, summary=None, content=None, author=No
 # ================================================================
 async def _fetch_eastmoney(client: httpx.AsyncClient, page_size: int) -> list[dict]:
     url = "https://np-listapi.eastmoney.com/comm/web/getNewsByColumns"
-    params = {"client": "web", "biz": "web_news_col", "column": "350", "page_size": page_size, "last_time": ""}
+    params = {
+        "client": "web", "biz": "web_news_col", "column": "350",
+        "page_size": page_size, "last_time": "", "req_trace": _req_trace(),
+    }
     resp = await client.get(url, params=params, timeout=10)
-    data = resp.json().get("data", {}).get("list", [])
+    data = (_safe_json(resp).get("data") or {}).get("list") or []
     items = []
     for row in data:
-        art = row.get("Art_ShowTime") or row.get("Art_PublishTime")
+        art = row.get("showTime") or row.get("showtime")
         items.append(_item(
-            title=row.get("Art_Title"),
-            url=row.get("Art_UniqueUrl") or row.get("url"),
+            title=row.get("title"),
+            url=row.get("uniqueUrl") or row.get("url"),
             source="eastmoney", source_name="东方财富",
-            summary=row.get("Art_Summary") or row.get("Art_Description"),
+            summary=row.get("summary") or row.get("digest"),
             raw_time=str(art) if art else None,
         ))
     return items
@@ -146,82 +163,83 @@ async def _fetch_eastmoney(client: httpx.AsyncClient, page_size: int) -> list[di
 
 async def _fetch_eastmoney_global(client: httpx.AsyncClient, page_size: int) -> list[dict]:
     url = "https://np-weblist.eastmoney.com/comm/web/getFastNewsList"
-    params = {"client": "web", "biz": "web_724", "fastColumn": "102", "sortEnd": "", "pageSize": page_size}
-    resp = await client.get(url, params=params, timeout=10)
-    data = resp.json().get("data", {}).get("list", [])
-    items = []
-    for row in data:
-        items.append(_item(
-            title=row.get("title"),
-            url=row.get("url_w") or row.get("url"),
-            source="eastmoney_global", source_name="7x24全球",
-            summary=row.get("digest"),
-            raw_time=row.get("showtime"),
-        ))
-    return items
-
-
-# ================================================================
-# 财联社（含签名，同一端点不同分类）
-# ================================================================
-_CLS_URL = "https://www.cls.cn/v1/roll/get_roll_list"
-
-
-def _cls_sign(app_name: str = "cls") -> dict:
-    """财联社请求所需签名/请求头。这里复用公开的固定签名参数。"""
-    return {
-        "Referer": "https://www.cls.cn/telegraph",
-        "Par-Id": "",
-        "Psp-Status": "1",
-        "Psp-Time": str(int(datetime.now().timestamp() * 1000)),
-        "App-info": "Cl5627477/9.5.6",
+    params = {
+        "client": "web", "biz": "web_724", "fastColumn": "102",
+        "sortEnd": "", "pageSize": page_size, "req_trace": _req_trace(),
     }
-
-
-async def _fetch_cls(client: httpx.AsyncClient, page_size: int, key: str, name: str, cat: str) -> list[dict]:
-    params = {"app": "CailianpressWeb", "category": cat, "os": "web", "sv": "8.4.6", "rn": page_size, "last_time": ""}
-    resp = await client.get(_CLS_URL, params=params, headers=_cls_sign(), timeout=10)
-    data = resp.json().get("data", {}).get("roll_data", [])
+    resp = await client.get(url, params=params, timeout=10)
+    _d = _safe_json(resp).get("data") or {}
+    data = _d.get("fastNewsList") or _d.get("list") or []
     items = []
     for row in data:
-        ctime = row.get("ctime")
-        raw_time = datetime.fromtimestamp(ctime).strftime("%Y-%m-%d %H:%M:%S") if ctime else None
         items.append(_item(
-            title=row.get("title") or _strip_html(row.get("content", ""))[:80],
-            url=f"https://www.cls.cn/detail/{row.get('id')}",
-            source=key, source_name=name,
-            summary=_strip_html(row.get("content")),
-            content=row.get("content"),
-            author=row.get("sharedata", {}).get("weibo") if isinstance(row.get("sharedata"), dict) else None,
-            raw_time=raw_time,
+           title=row.get("title"),
+           url=row.get("url_w") or row.get("url") or row.get("uniqueUrl") or f"https://finance.eastmoney.com/a/{row.get('code')}.html",
+           source="eastmoney_global", source_name="7x24全球",
+            summary=row.get("digest") or row.get("summary"),
+            raw_time=row.get("showtime") or row.get("showTime"),
         ))
     return items
 
 
-def _make_cls_fetcher(key: str, name: str, cat: str) -> Callable:
+# ================================================================
+# 财联社（通过 akshare）
+# ================================================================
+def _make_cls_fetcher() -> Callable:
     async def _fetcher(client: httpx.AsyncClient, page_size: int) -> list[dict]:
-        return await _fetch_cls(client, page_size, key, name, cat)
+        import akshare as ak
+
+        def _call():
+            return ak.stock_info_global_cls()
+
+        df = await asyncio.to_thread(_call)
+        items = []
+        for _, row in df.iterrows():
+            title = row.get("标题") or ""
+            content = str(row.get("内容") or "")
+            date = str(row.get("发布日期") or "")
+            tm = str(row.get("发布时间") or "")
+            raw_time = f"{date} {tm}".strip() or None
+            items.append(_item(
+                title=str(title),
+                url=f"https://www.cls.cn/telegraph/{abs(hash(title))}",
+                source="cls", source_name="财联社",
+                summary=_strip_html(content)[:1000],
+                content=content,
+                raw_time=raw_time,
+            ))
+        return items
     return _fetcher
 
 
 # ================================================================
 # 华尔街见闻
 # ================================================================
-async def _fetch_wallstreetcn(client: httpx.AsyncClient, page_size: int) -> list[dict]:
-    url = "https://api-one-wscn.awtmt.com/apiv1/content/lives?channel=global-channel&limit={}".format(page_size)
-    resp = await client.get(url, timeout=10)
-    data = resp.json().get("data", {}).get("items") or resp.json().get("data", {}).get("results", [])
-    items = []
-    for row in data:
-        items.append(_item(
-            title=row.get("title") or row.get("description", "")[:80],
-            url=row.get("uri") or f"https://wallstreetcn.com/news/global/{row.get('id')}",
-            source="wallstreetcn", source_name="华尔街见闻",
-            summary=row.get("description"),
-            content=row.get("content"),
-            raw_time=row.get("display_time") and datetime.fromtimestamp(row["display_time"]).strftime("%Y-%m-%d %H:%M:%S"),
-        ))
-    return items
+def _make_wallstreetcn_fetcher(key: str, name: str, channel: str) -> Callable:
+    """构造华尔街见闻频道抓取器"""
+    async def _fetcher(client: httpx.AsyncClient, page_size: int) -> list[dict]:
+        url = f"https://api-one-wscn.awtmt.com/apiv1/content/lives?channel={channel}&limit={page_size}"
+        resp = await client.get(url, timeout=10)
+        _d = _safe_json(resp).get("data", {}) or {}
+        data = _d.get("items") or _d.get("results", [])
+        items = []
+        for row in data:
+            # title 为空时从 content_text 的 【...】 前缀提取
+            title = row.get("title") or ""
+            if not title:
+                ct = row.get("content_text") or row.get("description") or ""
+                m = re.match(r"^【(.+?)】", ct)
+                title = m.group(1) if m else (ct[:80] if ct else "")
+            items.append(_item(
+                title=title,
+                url=row.get("uri") or f"https://wallstreetcn.com/livenews/{row.get('id')}",
+                source=key, source_name=name,
+                summary=row.get("content_text") or row.get("description"),
+                content=row.get("content"),
+                raw_time=row.get("display_time") and datetime.fromtimestamp(row["display_time"]).strftime("%Y-%m-%d %H:%M:%S"),
+            ))
+        return items
+    return _fetcher
 
 
 # ================================================================
@@ -234,72 +252,21 @@ async def _fetch_yicai(client: httpx.AsyncClient, page_size: int) -> list[dict]:
     rows = resp.json() or []
     items = []
     for row in rows:
+        link = row.get("url") or ""
+        if link and not link.startswith("http"):
+            link = f"https://www.yicai.com{link}"
         items.append(_item(
-            title=row.get("title"),
-            url=row.get("url") or f"https://www.yicai.com/news/{row.get('newsid')}.html",
+            title=row.get("NewsTitle"),
+            url=link or f"https://www.yicai.com/news/{row.get('NewsID')}.html",
             source="yicai", source_name="第一财经",
-            summary=row.get("summary") or row.get("description"),
-            raw_time=row.get("ctime") or row.get("time"),
+            summary=row.get("NewsNotes") or row.get("Hl"),
+            raw_time=row.get("CreateDate"),
         ))
     return items
 
 
 # ================================================================
-# 金融界（HTTP POST）
-# ================================================================
-async def _fetch_jrj(client: httpx.AsyncClient, page_size: int) -> list[dict]:
-    url = "https://gateway.jrj.com.cn/news/getNewsList"
-    payload = {"channel": "finance", "pageNum": 1, "pageSize": page_size or 20}
-    resp = await client.post(url, json=payload, timeout=10)
-    data = resp.json().get("data", {}).get("list", [])
-    items = []
-    for row in data:
-        items.append(_item(
-            title=row.get("title"),
-            url=row.get("url"),
-            source="jrj", source_name="金融界",
-            summary=row.get("summary"),
-            raw_time=row.get("pubtime") or row.get("publishTime"),
-        ))
-    return items
-
-
-# ================================================================
-# 雪球（带 Session）
-# ================================================================
-async def _fetch_xueqiu(client: httpx.AsyncClient, page_size: int) -> list[dict]:
-    url = "https://xueqiu.com/statuses/public_timeline_by_category.json"
-    params = {"category": "6", "count": page_size, "source": "all"}
-    # 先访问首页拿 cookie
-    try:
-        await client.get("https://xueqiu.com/", timeout=10)
-    except Exception:  # noqa: BLE001
-        pass
-    resp = await client.get(url, params=params, timeout=10)
-    data = resp.json().get("list", [])
-    items = []
-    for row in data:
-        desc = row.get("description") or row.get("text", "")
-        target = row.get("target")
-        if isinstance(target, dict):
-            title = target.get("title") or _strip_html(desc)[:80]
-            link = target.get("url") or f"https://xueqiu.com{row.get('target', {}).get('url', '')}"
-        else:
-            title = _strip_html(desc)[:80]
-            link = f"https://xueqiu.com/{row.get('user', {}).get('screen_name', '')}/{row.get('id')}"
-        items.append(_item(
-            title=title,
-            url=link,
-            source="xueqiu", source_name="雪球",
-            summary=_strip_html(desc),
-            author=row.get("user", {}).get("screen_name") if isinstance(row.get("user"), dict) else None,
-            raw_time=row.get("created_at") and datetime.fromtimestamp(row["created_at"] / 1000).strftime("%Y-%m-%d %H:%M:%S"),
-        ))
-    return items
-
-
-# ================================================================
-# akshare 源（同花顺 / 新浪 / 富途）
+# akshare 源（同花顺 / 新浪 / 富途 / 财联社）
 # ================================================================
 def _fetch_via_akshare(func_name: str, key: str, name: str) -> Callable:
     async def _fetcher(client: httpx.AsyncClient, page_size: int) -> list[dict]:
@@ -311,10 +278,24 @@ def _fetch_via_akshare(func_name: str, key: str, name: str) -> Callable:
         df = await asyncio.to_thread(_call)
         items = []
         for _, row in df.iterrows():
-            title = row.get("标题") or row.get("title") or ""
-            t = str(title)
             content = row.get("内容") or row.get("content") or ""
-            raw_time = str(row.get("时间") or row.get("datetime") or row.get("date") or "")
+            # 标题：优先取 标题/title 列；新浪只有 内容，标题藏在 【...】 前缀
+            title = row.get("标题") or row.get("title") or ""
+            if not title:
+                m = re.match(r"^【(.+?)】", str(content))
+                if m:
+                    title = m.group(1)
+            if not title:
+                title = _strip_html(str(content))[:80]
+            t = str(title)
+            # 时间：同花顺/富途用 发布时间，新浪用 时间
+            raw_time = str(
+                row.get("发布时间")
+                or row.get("时间")
+                or row.get("datetime")
+                or row.get("date")
+                or ""
+            )
             items.append(_item(
                 title=t,
                 url=str(row.get("链接") or row.get("url") or f"https://example.com/news/{key}/{abs(hash(t))}"),
@@ -331,20 +312,22 @@ def _fetch_via_akshare(func_name: str, key: str, name: str) -> Callable:
 # 源注册表
 # ================================================================
 NEWS_SOURCES: list[dict] = [
-    {"key": "eastmoney", "name": "东方财富", "page_size": 30, "fetch": _fetch_eastmoney},
-    {"key": "eastmoney_global", "name": "7x24全球", "page_size": 50, "fetch": _fetch_eastmoney_global},
-    {"key": "cls", "name": "财联社综合", "page_size": 20, "fetch": _make_cls_fetcher("cls", "财联社综合", "all")},
-    {"key": "cls_red", "name": "财联社加红", "page_size": 20, "fetch": _make_cls_fetcher("cls_red", "财联社加红", "important")},
-    {"key": "cls_announcement", "name": "财联社公告", "page_size": 20, "fetch": _make_cls_fetcher("cls_announcement", "财联社公告", "announce")},
-    {"key": "cls_watch", "name": "财联社看盘", "page_size": 20, "fetch": _make_cls_fetcher("cls_watch", "财联社看盘", "watch")},
-    {"key": "cls_hk_us", "name": "财联社港美股", "page_size": 20, "fetch": _make_cls_fetcher("cls_hk_us", "财联社港美股", "hk_us")},
-    {"key": "cls_fund", "name": "财联社基金", "page_size": 20, "fetch": _make_cls_fetcher("cls_fund", "财联社基金", "fund")},
-    {"key": "cls_remind", "name": "财联社提醒", "page_size": 20, "fetch": _make_cls_fetcher("cls_remind", "财联社提醒", "remind")},
-    {"key": "tonghuashun", "name": "同花顺", "page_size": 0, "fetch": _fetch_via_akshare("stock_info_global_ths", "tonghuashun", "同花顺")},
-    {"key": "sina", "name": "新浪财经", "page_size": 0, "fetch": _fetch_via_akshare("stock_info_global_sina", "sina", "新浪财经")},
-    {"key": "wallstreetcn", "name": "华尔街见闻", "page_size": 50, "fetch": _fetch_wallstreetcn},
-    {"key": "yicai", "name": "第一财经", "page_size": 20, "fetch": _fetch_yicai},
-    {"key": "futu", "name": "富途快讯", "page_size": 0, "fetch": _fetch_via_akshare("stock_info_global_futu", "futu", "富途快讯")},
-    {"key": "xueqiu", "name": "雪球", "page_size": 15, "fetch": _fetch_xueqiu},
-    {"key": "jrj", "name": "金融界", "page_size": 20, "fetch": _fetch_jrj},
+    {"key": "eastmoney", "name": "东方财富", "group": "东方财富", "page_size": 30, "fetch": _fetch_eastmoney},
+    {"key": "eastmoney_global", "name": "7x24全球", "group": "东方财富", "page_size": 50, "fetch": _fetch_eastmoney_global},
+    {"key": "cls", "name": "财联社", "group": "财联社", "page_size": 20, "fetch": _make_cls_fetcher()},
+    {"key": "tonghuashun", "name": "同花顺", "group": "同花顺", "page_size": 0, "fetch": _fetch_via_akshare("stock_info_global_ths", "tonghuashun", "同花顺")},
+    {"key": "sina", "name": "新浪财经", "group": "新浪财经", "page_size": 0, "fetch": _fetch_via_akshare("stock_info_global_sina", "sina", "新浪财经")},
+    {"key": "wscn_global", "name": "见闻要闻", "group": "华尔街见闻", "page_size": 50, "fetch": _make_wallstreetcn_fetcher("wscn_global", "见闻要闻", "global-channel")},
+    {"key": "wscn_a_stock", "name": "见闻A股", "group": "华尔街见闻", "page_size": 30, "fetch": _make_wallstreetcn_fetcher("wscn_a_stock", "见闻A股", "a-stock-channel")},
+    {"key": "wscn_hk_stock", "name": "见闻港股", "group": "华尔街见闻", "page_size": 30, "fetch": _make_wallstreetcn_fetcher("wscn_hk_stock", "见闻港股", "hk-stock-channel")},
+    {"key": "wscn_us_stock", "name": "见闻美股", "group": "华尔街见闻", "page_size": 30, "fetch": _make_wallstreetcn_fetcher("wscn_us_stock", "见闻美股", "us-stock-channel")},
+    {"key": "wscn_forex", "name": "见闻外汇", "group": "华尔街见闻", "page_size": 30, "fetch": _make_wallstreetcn_fetcher("wscn_forex", "见闻外汇", "forex-channel")},
+    {"key": "wscn_gold", "name": "见闻黄金", "group": "华尔街见闻", "page_size": 30, "fetch": _make_wallstreetcn_fetcher("wscn_gold", "见闻黄金", "goldc-channel")},
+    {"key": "wscn_oil", "name": "见闻石油", "group": "华尔街见闻", "page_size": 30, "fetch": _make_wallstreetcn_fetcher("wscn_oil", "见闻石油", "oil-channel")},
+    {"key": "wscn_commodity", "name": "见闻大宗", "group": "华尔街见闻", "page_size": 30, "fetch": _make_wallstreetcn_fetcher("wscn_commodity", "见闻大宗", "commodity-channel")},
+    {"key": "wscn_bond", "name": "见闻债券", "group": "华尔街见闻", "page_size": 30, "fetch": _make_wallstreetcn_fetcher("wscn_bond", "见闻债券", "bond-channel")},
+    {"key": "wscn_tech", "name": "见闻科技", "group": "华尔街见闻", "page_size": 30, "fetch": _make_wallstreetcn_fetcher("wscn_tech", "见闻科技", "tech-channel")},
+    {"key": "wscn_finance", "name": "见闻金融", "group": "华尔街见闻", "page_size": 30, "fetch": _make_wallstreetcn_fetcher("wscn_finance", "见闻金融", "financing-channel")},
+    {"key": "yicai", "name": "第一财经", "group": "第一财经", "page_size": 20, "fetch": _fetch_yicai},
+    {"key": "futu", "name": "富途快讯", "group": "富途快讯", "page_size": 0, "fetch": _fetch_via_akshare("stock_info_global_futu", "futu", "富途快讯")},
 ]

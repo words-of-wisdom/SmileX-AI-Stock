@@ -14,6 +14,7 @@ class NewsQueryParams(PageRequest):
 
     keyword: str | None = Field(None, description="关键词（标题模糊匹配）")
     source: str | None = Field(None, description="新闻源 key")
+    group: str | None = Field(None, description="来源分组（按组过滤）")
     start_time: str | None = Field(None, description="开始时间")
     end_time: str | None = Field(None, description="结束时间")
 
@@ -44,4 +45,5 @@ class NewsSourceItem(BaseEntity):
 
     source: str
     source_name: str
-    count: int = 0
+    group: str = Field("", description="来源分组")
+    count: int = Field(0, description="当日该来源条数")

@@ -1159,7 +1159,8 @@ const local: App.I18n.Schema = {
       allSources: '全部来源',
       viewOriginal: '查看原文',
       form: {
-        keyword: '请输入标题关键词'
+        keyword: '请输入标题关键词',
+        source: '请选择来源'
       }
     }
   },

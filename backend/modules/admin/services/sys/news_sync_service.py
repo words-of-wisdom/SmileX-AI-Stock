@@ -61,6 +61,7 @@ class NewsSyncService:
                             "author": it.get("author"),
                             "published_at": published_at,
                             "raw_time": it.get("raw_time"),
+                            "created_at": timezone.now(),
                         })
 
                     # PostgreSQL INSERT ... ON CONFLICT DO NOTHING（按 url 去重）
@@ -85,6 +86,7 @@ class NewsSyncService:
                     logger.info("新闻源 %s 抓取完成: fetched=%d saved=%d", key, fetched_count, saved_count)
                 except Exception as exc:  # noqa: BLE001
                     logger.warning("新闻源 %s 抓取失败: %s", key, exc)
+                    await db.rollback()
                     failed_sources.append({"source": key, "error": str(exc)})
                     db.add(BusinessNewsSyncLog(
                         source=key,

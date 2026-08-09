@@ -1,12 +1,14 @@
 <script setup lang="tsx">
 import { computed, onMounted, reactive, ref } from 'vue';
-import { NButton, NCard, NDataTable, NEmpty, NSpace, NSpin, NTag } from 'naive-ui';
+import { NButton, NCard, NDataTable, NTag } from 'naive-ui';
 import type { DataTableColumns } from 'naive-ui';
 import { fetchGetNewsList, fetchGetNewsSources } from '@/service/api';
 import { useAppStore } from '@/store/modules/app';
 import { $t } from '@/locales';
 import NewsDetailDrawer from './modules/news-detail-drawer.vue';
+import NewsWebModal from './modules/news-web-modal.vue';
 import NewsSearch from './modules/news-search.vue';
+import NewsSourceTabs from './modules/news-source-tabs.vue';
 
 defineOptions({
   name: 'News'
@@ -19,19 +21,21 @@ const SOURCE_COLOR_MAP: Record<string, NaiveUI.ThemeColor> = {
   eastmoney: 'success',
   eastmoney_global: 'info',
   cls: 'error',
-  cls_red: 'error',
-  cls_announcement: 'warning',
-  cls_watch: 'info',
-  cls_hk_us: 'success',
-  cls_fund: 'default',
-  cls_remind: 'warning',
   tonghuashun: 'info',
   sina: 'success',
-  wallstreetcn: 'error',
   yicai: 'warning',
   futu: 'default',
-  xueqiu: 'success',
-  jrj: 'info'
+  wscn_global: 'error',
+  wscn_a_stock: 'success',
+  wscn_hk_stock: 'warning',
+  wscn_us_stock: 'info',
+  wscn_forex: 'default',
+  wscn_gold: 'warning',
+  wscn_oil: 'info',
+  wscn_commodity: 'success',
+  wscn_bond: 'default',
+  wscn_tech: 'info',
+  wscn_finance: 'error'
 };
 
 function sourceColor(source: string): NaiveUI.ThemeColor {
@@ -44,37 +48,23 @@ const searchParams = reactive<Api.News.NewsSearchParams>({
   page_size: 10,
   keyword: null,
   source: null,
+  group: null,
   start_time: null,
   end_time: null
 });
 
-/** 选中的新闻源 key，null 表示全部 */
-const selectedSource = ref<string | null>(null);
-
 /** 新闻源统计 */
 const sources = ref<Api.News.NewsSourceItem[]>([]);
-const sourcesLoading = ref(false);
-
-const totalCount = computed(() => sources.value.reduce((acc, s) => acc + s.count, 0));
 
 async function loadSources() {
-  sourcesLoading.value = true;
   try {
     const { data, error } = await fetchGetNewsSources();
     if (!error) {
       sources.value = data || [];
     }
-  } finally {
-    sourcesLoading.value = false;
+  } catch {
+    // ignore — sources list is non-critical
   }
-}
-
-/** 选中某个源（null=全部） */
-function selectSource(key: string | null) {
-  selectedSource.value = key;
-  searchParams.source = key;
-  searchParams.page = 1;
-  getNewsData();
 }
 
 /** 列表数据 */
@@ -87,6 +77,9 @@ async function getNewsData() {
     const { data: resp, error } = await fetchGetNewsList(searchParams);
     if (!error && resp) {
       newsData.value = resp.records || [];
+      pagination.itemCount = resp.total || 0;
+      pagination.page = resp.page;
+      pagination.pageSize = resp.page_size;
     }
   } finally {
     loading.value = false;
@@ -110,6 +103,14 @@ function onSearch() {
   loadSources();
 }
 
+/** 来源 Tab 选择 */
+function onSelectSource(payload: { source: string | null; group: string | null }) {
+  searchParams.source = payload.source;
+  searchParams.group = payload.group;
+  searchParams.page = 1;
+  getNewsData();
+}
+
 /** 详情抽屉 */
 const drawerVisible = ref(false);
 const currentNewsId = ref<number | null>(null);
@@ -117,6 +118,17 @@ const currentNewsId = ref<number | null>(null);
 function openDetail(id: number) {
   currentNewsId.value = id;
   drawerVisible.value = true;
+}
+
+/** 网页预览弹窗 */
+const webModalVisible = ref(false);
+const currentWebUrl = ref<string | null>(null);
+const currentWebTitle = ref('');
+
+function openWebPreview(url: string, title: string) {
+  currentWebUrl.value = url;
+  currentWebTitle.value = title;
+  webModalVisible.value = true;
 }
 
 /** 表格列 */
@@ -153,6 +165,19 @@ const columns = computed<DataTableColumns<Api.News.News>>(() => [
     title: $t('page.news.publishedAt'),
     width: 170,
     render: row => <span class="text-secondary">{row.published_at || row.created_at || '-'}</span>
+  },
+  {
+    key: 'actions',
+    title: $t('common.action'),
+    width: 80,
+    fixed: 'right',
+    render: row => (
+      <div class="flex-center gap-4px">
+        <NButton text type="primary" onClick={() => openWebPreview(row.url, row.title)}>
+          <icon-ic-round-open-in-new class="text-icon" />
+        </NButton>
+      </div>
+    )
   }
 ]);
 
@@ -175,110 +200,39 @@ onMounted(async () => {
 
 <template>
   <div class="min-h-500px flex-col-stretch gap-16px overflow-hidden lt-sm:overflow-auto">
-    <NewsSearch :model="searchParams" @search="onSearch" @reset="onSearch" />
-    <div class="flex flex-1-hidden gap-16px overflow-hidden lt-sm:flex-col">
-      <!-- 源侧栏 -->
-      <NCard :bordered="false" size="small" class="news-source-sidebar lt-sm:w-full">
-        <NSpin :show="sourcesLoading">
-          <div class="flex-col-stretch gap-4px">
-            <NButton
-              :type="selectedSource === null ? 'primary' : 'default'"
-              :ghost="selectedSource === null"
-              size="small"
-              class="justify-start"
-              block
-              @click="selectSource(null)"
-            >
-              <div class="flex w-full items-center justify-between">
-                <span>{{ $t('page.news.allSources') }}</span>
-                <NTag :bordered="false" size="tiny" round>{{ totalCount }}</NTag>
-              </div>
-            </NButton>
-            <NButton
-              v-for="s in sources"
-              :key="s.source"
-              :type="selectedSource === s.source ? 'primary' : 'default'"
-              :ghost="selectedSource === s.source"
-              size="small"
-              class="justify-start"
-              block
-              @click="selectSource(s.source)"
-            >
-              <div class="flex w-full items-center justify-between">
-                <NSpace align="center" :size="4">
-                  <span class="news-dot" :class="`news-dot-${sourceColor(s.source)}`" />
-                  <span>{{ s.source_name }}</span>
-                </NSpace>
-                <NTag :bordered="false" size="tiny" round>{{ s.count }}</NTag>
-              </div>
-            </NButton>
-            <NEmpty v-if="sources.length === 0" :description="$t('common.noData')" class="py-24px" />
-          </div>
-        </NSpin>
-      </NCard>
-      <!-- 主列表 -->
-      <NCard
-        :title="$t('page.news.title')"
-        :bordered="false"
+    <NewsSourceTabs :sources="sources" @select="onSelectSource" />
+    <NewsSearch v-model:model="searchParams" @search="onSearch" @reset="onSearch" />
+    <NCard
+      :title="$t('page.news.title')"
+      :bordered="false"
+      size="small"
+      class="card-wrapper sm:flex-1-hidden"
+    >
+      <template #header-extra>
+        <NButton size="small" :loading="loading" @click="getNewsData">
+          <template #icon>
+            <icon-ic-round-refresh class="text-icon" />
+          </template>
+          {{ $t('common.refresh') }}
+        </NButton>
+      </template>
+      <NDataTable
+        :columns="columns"
+        :data="newsData"
         size="small"
-        class="card-wrapper sm:flex-1-hidden"
-      >
-        <template #header-extra>
-          <NButton size="small" :loading="loading" @click="getNewsData">
-            <template #icon>
-              <icon-ic-round-refresh class="text-icon" />
-            </template>
-            {{ $t('common.refresh') }}
-          </NButton>
-        </template>
-        <NDataTable
-          :columns="columns"
-          :data="newsData"
-          size="small"
-          :flex-height="!appStore.isMobile"
-          :scroll-x="900"
-          :loading="loading"
-          remote
-          :row-key="(row: Api.News.News) => row.id"
-          :pagination="pagination"
-          class="sm:h-full"
-        />
-      </NCard>
-    </div>
+        :flex-height="!appStore.isMobile"
+        :scroll-x="1000"
+        :loading="loading"
+        remote
+        :row-key="(row: Api.News.News) => row.id"
+        :pagination="pagination"
+        class="sm:h-full"
+      />
+    </NCard>
     <NewsDetailDrawer v-model:visible="drawerVisible" :news-id="currentNewsId" />
+    <NewsWebModal v-model:visible="webModalVisible" :url="currentWebUrl" :title="currentWebTitle" />
   </div>
 </template>
 
 <style scoped>
-.news-source-sidebar {
-  width: 220px;
-  flex-shrink: 0;
-}
-
-.news-dot {
-  display: inline-block;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-}
-
-.news-dot-success {
-  background: var(--n-color-success, #18a058);
-}
-
-.news-dot-info {
-  background: var(--n-color-info, #2080f0);
-}
-
-.news-dot-warning {
-  background: var(--n-color-warning, #f0a020);
-}
-
-.news-dot-error {
-  background: var(--n-color-error, #d03050);
-}
-
-.news-dot-default {
-  background: var(--n-color-default, #909399);
-}
 </style>

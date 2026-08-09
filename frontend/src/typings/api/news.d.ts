@@ -36,14 +36,15 @@ declare namespace Api {
     }
 
     /** 新闻搜索参数 */
-    type NewsSearchParams = CommonType.RecordNullable<
-      {
-        keyword?: string | null;
-        source?: string | null;
-        start_time?: string | null;
-        end_time?: string | null;
-      } & Common.CommonSearchParams
-    >;
+   type NewsSearchParams = CommonType.RecordNullable<
+     {
+       keyword?: string | null;
+       source?: string | null;
+        group?: string | null;
+       start_time?: string | null;
+       end_time?: string | null;
+     } & Common.CommonSearchParams
+   >;
 
     /** 新闻列表 */
     type NewsList = Common.PaginatingQueryRecord<News>;
@@ -54,6 +55,8 @@ declare namespace Api {
       source: string;
       /** 新闻源中文名 */
       source_name: string;
+      /** 来源分组 */
+      group: string;
       /** 该源新闻条数 */
       count: number;
     }

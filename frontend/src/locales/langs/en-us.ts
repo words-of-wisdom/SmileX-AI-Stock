@@ -1166,7 +1166,8 @@ const local: App.I18n.Schema = {
       allSources: 'All Sources',
       viewOriginal: 'View Original',
       form: {
-        keyword: 'Enter title keyword'
+        keyword: 'Enter title keyword',
+        source: 'Select source'
       }
     }
   },
