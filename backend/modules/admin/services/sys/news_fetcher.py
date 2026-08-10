@@ -266,6 +266,45 @@ async def _fetch_yicai(client: httpx.AsyncClient, page_size: int) -> list[dict]:
 
 
 # ================================================================
+# 金十数据
+# ================================================================
+def _make_jin10_fetcher(key: str, name: str, important_only: bool = False) -> Callable:
+    async def _fetcher(client: httpx.AsyncClient, page_size: int) -> list[dict]:
+        url = "https://flash-api.jin10.com/get_flash_list"
+        headers = {
+            "Origin": "https://www.jin10.com",
+            "Referer": "https://www.jin10.com/",
+            "X-App-id": "bVBF4FyRTn5NJF5n",
+            "X-Version": "1.0.0",
+        }
+        resp = await client.get(
+            url, params={"channel": "-8200", "vip": 1},
+            headers=headers, timeout=10,
+        )
+        data = _safe_json(resp).get("data") or []
+        if important_only:
+            data = [d for d in data if d.get("important")]
+        items = []
+        for row in data:
+            inner = row.get("data") or {}
+            content = inner.get("content") or ""
+            title = inner.get("title") or ""
+            if not title:
+                m = re.match(r"^【(.+?)】", content)
+                title = m.group(1) if m else _strip_html(content)[:80]
+            items.append(_item(
+                title=title,
+                url=f"https://flash-api.jin10.com/detail/{row.get('id')}",
+                source=key, source_name=name,
+                summary=_strip_html(content)[:1000],
+                content=content,
+                raw_time=row.get("time"),
+            ))
+        return items
+    return _fetcher
+
+
+# ================================================================
 # akshare 源（同花顺 / 新浪 / 富途 / 财联社）
 # ================================================================
 def _fetch_via_akshare(func_name: str, key: str, name: str) -> Callable:
@@ -329,5 +368,7 @@ NEWS_SOURCES: list[dict] = [
     {"key": "wscn_tech", "name": "见闻科技", "group": "华尔街见闻", "page_size": 30, "fetch": _make_wallstreetcn_fetcher("wscn_tech", "见闻科技", "tech-channel")},
     {"key": "wscn_finance", "name": "见闻金融", "group": "华尔街见闻", "page_size": 30, "fetch": _make_wallstreetcn_fetcher("wscn_finance", "见闻金融", "financing-channel")},
     {"key": "yicai", "name": "第一财经", "group": "第一财经", "page_size": 20, "fetch": _fetch_yicai},
+    {"key": "jin10", "name": "金十综合", "group": "金十数据", "page_size": 20, "fetch": _make_jin10_fetcher("jin10", "金十综合")},
+    {"key": "jin10_important", "name": "金十重要", "group": "金十数据", "page_size": 20, "fetch": _make_jin10_fetcher("jin10_important", "金十重要", important_only=True)},
     {"key": "futu", "name": "富途快讯", "group": "富途快讯", "page_size": 0, "fetch": _fetch_via_akshare("stock_info_global_futu", "futu", "富途快讯")},
 ]
