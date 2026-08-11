@@ -36,9 +36,18 @@ export function fetchGetMarketDates() {
   });
 }
 
+/** get market fund flow history */
+export function fetchGetMarketFundFlow(days?: number) {
+  return request<Api.StockMarket.MarketFundFlowItem[]>({
+    url: '/admin/stock/market/fund-flow',
+    method: 'get',
+    params: { days: days || 60 }
+  });
+}
+
 /** manually trigger market sync */
 export function fetchSyncMarket() {
-  return request<{ fetched: number; saved: number }>({
+  return request<{ fetched: number; saved: number; fund_flow: number }>({
     url: '/admin/stock/market/sync',
     method: 'post'
   });

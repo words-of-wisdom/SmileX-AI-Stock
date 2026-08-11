@@ -66,5 +66,23 @@ declare namespace Api {
       /** 指数名称 */
       index_name: string;
     }
+
+    /** 大盘资金流日快照项 */
+    interface MarketFundFlowItem {
+      /** 记录 ID */
+      id: number;
+      /** 快照日期 */
+      record_date: string;
+      /** 主力净流入(元) */
+      main_net_inflow: number | null;
+      /** 超大单净流入(元) */
+      super_large_net_inflow: number | null;
+      /** 大单净流入(元) */
+      large_net_inflow: number | null;
+      /** 中单净流入(元) */
+      medium_net_inflow: number | null;
+      /** 小单净流入(元) */
+      small_net_inflow: number | null;
+    }
   }
 }

@@ -169,6 +169,42 @@ async def _fetch_index_spot_baostock() -> list[dict]:
     return items
 
 
+async def fetch_market_fund_flow() -> list[dict]:
+    """抓取大盘（沪深两市）资金流历史（东财，约最近 100 个交易日）
+
+    返回标准化 dict 列表（按日期升序），字段：
+        record_date / main_net_inflow / super_large_net_inflow /
+        large_net_inflow / medium_net_inflow / small_net_inflow（单位均为元）
+
+    说明：东财大盘资金流走 push2his 家族接口，东财限流/封禁期间会抛异常，
+    该数据暂无可用兜底源，由调用方捕获后跳过（页面显示 "-"），待东财恢复自动补齐
+    """
+    import akshare as ak
+
+    df = await asyncio.to_thread(ak.stock_market_fund_flow)
+    if df is None or df.empty:
+        raise RuntimeError("东财大盘资金流返回为空")
+
+    items = []
+    for _, row in df.iterrows():
+        d = row.get("日期")
+        d = d.date() if hasattr(d, "date") else d
+        if not isinstance(d, date):
+            continue
+        items.append({
+            "record_date": d.isoformat(),
+            "main_net_inflow": num(_pick(row, "主力净流入-净额", "主力净流入净额")),
+            "super_large_net_inflow": num(_pick(row, "超大单净流入-净额", "超大单净流入净额")),
+            "large_net_inflow": num(_pick(row, "大单净流入-净额", "大单净流入净额")),
+            "medium_net_inflow": num(_pick(row, "中单净流入-净额", "中单净流入净额")),
+            "small_net_inflow": num(_pick(row, "小单净流入-净额", "小单净流入净额")),
+        })
+
+    if not items:
+        raise RuntimeError("东财大盘资金流无有效日期行")
+    return items
+
+
 async def fetch_index_history(index_code: str, start_date: str, end_date: str) -> list[dict]:
     """抓取单指数日线历史，akshare 失败时自动降级 baostock
 

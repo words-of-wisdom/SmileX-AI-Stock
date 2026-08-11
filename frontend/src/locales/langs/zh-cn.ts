@@ -1241,9 +1241,18 @@ const local: App.I18n.Schema = {
         totalTurnover: '总成交额',
         indexCount: '指数数量',
         turnover: '成交额',
+        volume: '成交量',
         amplitude: '振幅',
         highLow: '最高/最低',
+        high: '最高',
+        low: '最低',
+        open: '今开',
+        prevClose: '昨收',
         closePrice: '收盘价',
+        miniTrend: '近期走势',
+        trend: '走势图',
+        netInflow: '主力净流入',
+        lastRefresh: '最后刷新',
         sync: '同步数据',
         syncSuccess: '大盘指数同步完成',
         datePlaceholder: '选择日期查看历史',
@@ -1264,6 +1273,7 @@ const local: App.I18n.Schema = {
         sortByNetInflow: '按资金流',
         desc: '降序',
         asc: '升序',
+        lastRefresh: '最后刷新',
         sync: '同步数据',
         syncSuccess: '板块数据同步完成',
         datePlaceholder: '选择日期查看历史'
@@ -1293,6 +1303,7 @@ const local: App.I18n.Schema = {
         main: '沪深主板',
         chinext: '创业板',
         star: '科创板',
+        lastRefresh: '最后刷新',
         sync: '同步数据',
         syncSuccess: '涨停股池同步完成',
         datePlaceholder: '选择日期查看历史'
@@ -1307,6 +1318,7 @@ const local: App.I18n.Schema = {
         hotValue: '热度',
         dateLabel: '日期',
         datePlaceholder: '选择日期查看历史',
+        lastRefresh: '最后刷新',
         sync: '同步数据'
       }
     }

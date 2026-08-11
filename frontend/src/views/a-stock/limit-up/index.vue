@@ -4,7 +4,9 @@ import { computed, onMounted, ref } from 'vue';
 import { NButton, NCard, NDataTable, NDatePicker, NGrid, NGridItem, NPagination, NRadioButton, NRadioGroup, NSpace, NStatistic, NTag, NText } from 'naive-ui';
 import type { DataTableColumns } from 'naive-ui';
 import { fetchGetLimitUpDates, fetchGetLimitUpList, fetchGetLimitUpStats, fetchSyncLimitUp } from '@/service/api';
+import { useAutoRefresh } from '@/hooks/common/auto-refresh';
 import { $t } from '@/locales';
+import { isStockAutoRefreshTime } from '../utils';
 
 defineOptions({
   name: 'LimitUp'
@@ -78,8 +80,8 @@ function renderConsecutive(val: number | null) {
   );
 }
 
-async function loadData() {
-  loading.value = true;
+async function loadData(silent = false) {
+  if (!silent) loading.value = true;
   try {
     const { data: resp, error } = await fetchGetLimitUpList({
       date: selectedDate.value ? dayjs(selectedDate.value).format('YYYY-MM-DD') : null,
@@ -92,7 +94,7 @@ async function loadData() {
       total.value = resp.total;
     }
   } finally {
-    loading.value = false;
+    if (!silent) loading.value = false;
   }
 }
 
@@ -114,12 +116,17 @@ async function syncData() {
     const { error } = await fetchSyncLimitUp();
     if (!error) {
       window.$message?.success($t('page.aStock.limitUp.syncSuccess'));
-      await Promise.all([loadData(), loadStats(), loadDates()]);
+      await refresh();
     }
   } finally {
     syncing.value = false;
   }
 }
+
+/** 最后刷新时间 + 定时自动刷新（退出页面自动停止计时器） */
+const { lastRefreshTime, refresh } = useAutoRefresh(async (silent: boolean) => {
+  await Promise.all([loadData(silent), loadStats(), loadDates()]);
+}, { shouldRefresh: isStockAutoRefreshTime });
 
 function onFilterChange() {
   page.value = 1;
@@ -235,9 +242,7 @@ const columns = computed<DataTableColumns<Api.StockLimitUp.LimitUpStockItem>>(()
 ]);
 
 onMounted(() => {
-  loadData();
-  loadStats();
-  loadDates();
+  refresh();
 });
 </script>
 
@@ -281,6 +286,10 @@ onMounted(() => {
           <NRadioButton value="star">{{ $t('page.aStock.limitUp.star') }}</NRadioButton>
         </NRadioGroup>
         <NSpace align="center" :size="12">
+          <NText depth="3" class="flex-y-center gap-4px text-12px whitespace-nowrap">
+            <icon-mdi-clock-outline class="text-14px" />
+            {{ $t('page.aStock.limitUp.lastRefresh') }} {{ lastRefreshTime ? lastRefreshTime.format('HH:mm:ss') : '-' }}
+          </NText>
           <NDatePicker
             v-model:value="selectedDate"
             type="date"
@@ -295,7 +304,7 @@ onMounted(() => {
             <template #icon><icon-mdi-cloud-download-outline class="text-icon" /></template>
             {{ $t('page.aStock.limitUp.sync') }}
           </NButton>
-          <NButton size="small" :loading="loading" @click="onFilterChange">
+          <NButton size="small" :loading="loading" @click="() => refresh()">
             <template #icon><icon-ic-round-refresh class="text-icon" /></template>
             {{ $t('common.refresh') }}
           </NButton>

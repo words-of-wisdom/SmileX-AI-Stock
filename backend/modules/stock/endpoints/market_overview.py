@@ -15,6 +15,7 @@ from modules.admin.deps.auth.user_manager import current_user
 from modules.admin.deps.auth.permission import require_permission
 from modules.stock.services.market_service import MarketService
 from modules.stock.schemas.market_overview import (
+    MarketFundFlowItem,
     MarketIndexItem,
     MarketIndexHistoryItem,
     MarketIndexOption,
@@ -101,3 +102,19 @@ async def get_market_dates(
     """获取大盘指数所有可回看的快照日期（降序）"""
     dates = await MarketService.get_dates(db)
     return response_base.success(data=[d.isoformat() for d in dates])
+
+
+@market_router.get(
+    "/fund-flow",
+    response_model=ResponseModel[list[MarketFundFlowItem]],
+    summary="获取大盘资金流历史",
+    dependencies=[Depends(require_permission("stock:market:list"))],
+)
+async def get_market_fund_flow(
+    days: int = Query(60, ge=1, le=365, description="回看天数"),
+    user=Depends(current_user),
+    db: AsyncSession = Depends(get_session),
+):
+    """获取大盘（沪深两市）资金流历史，含主力/超大单/大单/中单/小单净流入，按日期升序"""
+    data = await MarketService.get_fund_flow(db, days)
+    return response_base.success(data=data)

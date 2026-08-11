@@ -5,6 +5,7 @@ import { NButton, NCard, NDatePicker, NGrid, NGridItem, NSpace, NStatistic, NTex
 import { fetchGetMarketDates, fetchGetMarketIndices, fetchSyncMarket } from '@/service/api';
 import { useAutoRefresh } from '@/hooks/common/auto-refresh';
 import { $t } from '@/locales';
+import { isStockAutoRefreshTime } from '../../utils';
 
 const UP = '#f5222d';
 const DOWN = '#52c41a';
@@ -78,7 +79,7 @@ async function syncData() {
 /** 最后刷新时间 + 定时自动刷新（退出页面自动停止计时器） */
 const { lastRefreshTime, refresh } = useAutoRefresh(async (silent: boolean) => {
   await Promise.all([loadData(silent), loadDates()]);
-});
+}, { shouldRefresh: isStockAutoRefreshTime });
 
 function onDateChange() {
   loadData();

@@ -11,9 +11,13 @@ from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from database.models.business.stock_market import BusinessMarketIndexDaily
+from database.models.business.stock_market import (
+    BusinessMarketFundFlow,
+    BusinessMarketIndexDaily,
+)
 from database.utils.timezone import timezone
 from modules.stock.schemas.market_overview import (
+    MarketFundFlowItem,
     MarketIndexItem,
     MarketIndexHistoryItem,
     MarketIndexOption,
@@ -28,11 +32,11 @@ class MarketService:
 
     @staticmethod
     async def sync_all(db: AsyncSession) -> dict:
-        """抓取主要指数实时行情并写入当日快照"""
+        """抓取主要指数实时行情并写入当日快照；同时同步大盘资金流（失败不影响指数快照）"""
         today = timezone.now().date()
         raw_items = await market_fetcher.fetch_index_spot()
         if not raw_items:
-            return {"fetched": 0, "saved": 0}
+            return {"fetched": 0, "saved": 0, "fund_flow": 0}
 
         rows = [
             {
@@ -76,7 +80,78 @@ class MarketService:
         result = await db.execute(stmt)
         await db.commit()
 
-        return {"fetched": len(raw_items), "saved": result.rowcount or 0}
+        # 大盘资金流为东财单一数据源，限流期间可能失败，不阻塞指数快照入库
+        fund_flow_saved = 0
+        try:
+            fund_flow_saved = await MarketService.sync_fund_flow(db)
+        except Exception:
+            logger.warning("大盘资金流同步失败（不影响指数快照）", exc_info=True)
+
+        return {
+            "fetched": len(raw_items),
+            "saved": result.rowcount or 0,
+            "fund_flow": fund_flow_saved,
+        }
+
+    @staticmethod
+    async def sync_fund_flow(db: AsyncSession) -> int:
+        """抓取大盘资金流历史并 UPSERT 入库，返回写入行数"""
+        raw_items = await market_fetcher.fetch_market_fund_flow()
+        if not raw_items:
+            return 0
+
+        rows = [
+            {
+                "record_date": date.fromisoformat(it["record_date"]),
+                "main_net_inflow": it.get("main_net_inflow"),
+                "super_large_net_inflow": it.get("super_large_net_inflow"),
+                "large_net_inflow": it.get("large_net_inflow"),
+                "medium_net_inflow": it.get("medium_net_inflow"),
+                "small_net_inflow": it.get("small_net_inflow"),
+                "created_at": timezone.now(),
+            }
+            for it in raw_items
+        ]
+        stmt = insert(BusinessMarketFundFlow).values(rows)
+        stmt = stmt.on_conflict_do_update(
+            index_elements=["record_date"],
+            set_={
+                "main_net_inflow": stmt.excluded.main_net_inflow,
+                "super_large_net_inflow": stmt.excluded.super_large_net_inflow,
+                "large_net_inflow": stmt.excluded.large_net_inflow,
+                "medium_net_inflow": stmt.excluded.medium_net_inflow,
+                "small_net_inflow": stmt.excluded.small_net_inflow,
+                "updated_at": timezone.now(),
+            },
+        )
+        result = await db.execute(stmt)
+        await db.commit()
+        return result.rowcount or 0
+
+    @staticmethod
+    async def _query_fund_flow_rows(db: AsyncSession, days: int) -> list[BusinessMarketFundFlow]:
+        result = await db.execute(
+            select(BusinessMarketFundFlow)
+            .where(BusinessMarketFundFlow.deleted_at.is_(None))
+            .order_by(BusinessMarketFundFlow.record_date.desc())
+            .limit(days)
+        )
+        return list(result.scalars().all())
+
+    @staticmethod
+    async def get_fund_flow(db: AsyncSession, days: int = 60) -> list[MarketFundFlowItem]:
+        """获取大盘资金流历史（按日期升序）；本地为空时先尝试同步回补"""
+        rows = await MarketService._query_fund_flow_rows(db, days)
+        if not rows:
+            try:
+                await MarketService.sync_fund_flow(db)
+            except Exception:
+                logger.warning("大盘资金流回补失败", exc_info=True)
+            rows = await MarketService._query_fund_flow_rows(db, days)
+        return [
+            MarketFundFlowItem.model_validate(row)
+            for row in reversed(rows)
+        ]
 
     @staticmethod
     async def get_indices(

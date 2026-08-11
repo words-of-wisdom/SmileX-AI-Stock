@@ -4,6 +4,7 @@
 """
 A股行情快照表
 - 大盘指数日快照
+- 大盘资金流日快照
 - 行业/概念板块日快照
 - 涨停股池日快照
 """
@@ -71,6 +72,37 @@ class BusinessMarketIndexDaily(Base):
     )
     prev_close: Mapped[Optional[float]] = mapped_column(
         Numeric(16, 4), nullable=True, comment="昨收", default=None
+    )
+
+
+class BusinessMarketFundFlow(Base):
+    """大盘资金流日快照表"""
+
+    __table_args__ = (
+        UniqueConstraint(
+            "record_date",
+            name="uk_market_fund_flow_date",
+        ),
+        {"comment": "大盘资金流日快照表"},
+    )
+
+    record_date: Mapped[date] = mapped_column(
+        Date, nullable=False, index=True, comment="快照日期（本地时区）"
+    )
+    main_net_inflow: Mapped[Optional[float]] = mapped_column(
+        Numeric(20, 2), nullable=True, comment="主力净流入(元)", default=None
+    )
+    super_large_net_inflow: Mapped[Optional[float]] = mapped_column(
+        Numeric(20, 2), nullable=True, comment="超大单净流入(元)", default=None
+    )
+    large_net_inflow: Mapped[Optional[float]] = mapped_column(
+        Numeric(20, 2), nullable=True, comment="大单净流入(元)", default=None
+    )
+    medium_net_inflow: Mapped[Optional[float]] = mapped_column(
+        Numeric(20, 2), nullable=True, comment="中单净流入(元)", default=None
+    )
+    small_net_inflow: Mapped[Optional[float]] = mapped_column(
+        Numeric(20, 2), nullable=True, comment="小单净流入(元)", default=None
     )
 
 

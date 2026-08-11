@@ -6,6 +6,7 @@ import type { DataTableColumns } from 'naive-ui';
 import { fetchGetBoardDates, fetchGetBoardList, fetchSyncBoard } from '@/service/api';
 import { useAutoRefresh } from '@/hooks/common/auto-refresh';
 import { $t } from '@/locales';
+import { isStockAutoRefreshTime } from '../utils';
 
 defineOptions({
   name: 'IndustryBoard'
@@ -82,7 +83,7 @@ async function syncData() {
 /** 最后刷新时间 + 定时自动刷新（退出页面自动停止计时器） */
 const { lastRefreshTime, refresh } = useAutoRefresh(async (silent: boolean) => {
   await Promise.all([loadData(silent), loadDates()]);
-});
+}, { shouldRefresh: isStockAutoRefreshTime });
 
 function onBoardTypeChange() {
   selectedDate.value = null;

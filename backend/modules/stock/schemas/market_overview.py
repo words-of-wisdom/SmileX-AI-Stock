@@ -50,3 +50,15 @@ class MarketIndexOption(BaseEntity):
 
     index_code: str
     index_name: str
+
+
+class MarketFundFlowItem(BaseEntity):
+    """大盘资金流日快照项"""
+
+    id: int
+    record_date: date
+    main_net_inflow: float | None = None
+    super_large_net_inflow: float | None = None
+    large_net_inflow: float | None = None
+    medium_net_inflow: float | None = None
+    small_net_inflow: float | None = None

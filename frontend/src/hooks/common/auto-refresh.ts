@@ -7,11 +7,16 @@ import { onActivated, onDeactivated, onMounted, onUnmounted, ref } from 'vue';
  * - 页面挂载 / keep-alive 重新激活时启动定时器，停用 / 卸载时停止，退出页面后定时器不会空转
  * - 定时触发为静默刷新（silent=true），页面可据此跳过 loading 闪烁
  * - 每次刷新成功后更新 lastRefreshTime，供页面展示"最后刷新时间"
- *
- * @param refreshFn 刷新函数，silent 表示本次是否由定时器静默触发
- * @param interval 刷新间隔（毫秒），默认 60 秒
  */
-export function useAutoRefresh(refreshFn: (silent: boolean) => Promise<void> | void, interval = 60_000) {
+interface UseAutoRefreshOptions {
+  /** 刷新间隔（毫秒），默认 60 秒 */
+  interval?: number;
+  /** 定时触发前的闸门：返回 false 跳过本轮刷新（手动调 refresh 不受影响） */
+  shouldRefresh?: () => boolean;
+}
+
+export function useAutoRefresh(refreshFn: (silent: boolean) => Promise<void> | void, options: UseAutoRefreshOptions = {}) {
+  const { interval = 60_000, shouldRefresh } = options;
   /** 最近一次刷新完成时间 */
   const lastRefreshTime = ref<Dayjs | null>(null);
 
@@ -40,6 +45,7 @@ export function useAutoRefresh(refreshFn: (silent: boolean) => Promise<void> | v
   function startTimer() {
     stopTimer();
     timer = setInterval(() => {
+      if (shouldRefresh && !shouldRefresh()) return;
       void refresh(true);
     }, interval);
   }

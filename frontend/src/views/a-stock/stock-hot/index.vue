@@ -10,7 +10,9 @@ import {
   fetchSyncStockHot
 } from '@/service/api';
 import { useAppStore } from '@/store/modules/app';
+import { useAutoRefresh } from '@/hooks/common/auto-refresh';
 import { $t } from '@/locales';
+import { isStockAutoRefreshTime } from '../utils';
 import StockHotSourceTabs from './modules/stock-hot-source-tabs.vue';
 
 defineOptions({
@@ -65,9 +67,9 @@ const maxHot = computed(() => {
   return mx || 1;
 });
 
-async function getRankData() {
+async function getRankData(silent = false) {
   if (!activeSource.value) return;
-  loading.value = true;
+  if (!silent) loading.value = true;
   try {
     const { data, error } = await fetchGetStockHotList(
       activeSource.value,
@@ -77,7 +79,7 @@ async function getRankData() {
       rankData.value = data || [];
     }
   } finally {
-    loading.value = false;
+    if (!silent) loading.value = false;
   }
 }
 
@@ -92,11 +94,10 @@ function onDateChange() {
   getRankData();
 }
 
-function refresh() {
-  getRankData();
-  loadSources();
-  loadDates();
-}
+/** 最后刷新时间 + 定时自动刷新（退出页面自动停止计时器） */
+const { lastRefreshTime, refresh } = useAutoRefresh(async (silent: boolean) => {
+  await Promise.all([getRankData(silent), loadSources(), loadDates()]);
+}, { shouldRefresh: isStockAutoRefreshTime });
 
 /** 手动触发同步 */
 const syncing = ref(false);
@@ -106,7 +107,7 @@ async function syncData() {
     const { error } = await fetchSyncStockHot();
     if (!error) {
       window.$message?.success('热榜同步完成');
-      await Promise.all([getRankData(), loadSources(), loadDates()]);
+      await refresh();
     }
   } finally {
     syncing.value = false;
@@ -284,8 +285,8 @@ function openStockPage(code: string) {
   window.open(`https://xueqiu.com/S/${prefix}${pure}`, '_blank');
 }
 
-onMounted(async () => {
-  await Promise.all([getRankData(), loadSources(), loadDates()]);
+onMounted(() => {
+  refresh();
 });
 </script>
 
@@ -300,6 +301,10 @@ onMounted(async () => {
     >
       <template #header-extra>
         <NSpace align="center" :size="12">
+          <NText depth="3" class="flex-y-center gap-4px text-12px whitespace-nowrap">
+            <icon-mdi-clock-outline class="text-14px" />
+            {{ $t('page.aStock.stockHot.lastRefresh') }} {{ lastRefreshTime ? lastRefreshTime.format('HH:mm:ss') : '-' }}
+          </NText>
           <span class="text-13px text-secondary">{{ $t('page.aStock.stockHot.dateLabel') }}</span>
           <NDatePicker
             v-model:value="selectedDate"
@@ -317,7 +322,7 @@ onMounted(async () => {
             </template>
             {{ $t('page.aStock.stockHot.sync') }}
           </NButton>
-          <NButton size="small" :loading="loading" @click="refresh">
+          <NButton size="small" :loading="loading" @click="() => refresh()">
             <template #icon>
               <icon-ic-round-refresh class="text-icon" />
             </template>

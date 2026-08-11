@@ -1376,9 +1376,18 @@ declare namespace App {
             totalTurnover: string;
             indexCount: string;
             turnover: string;
+            volume: string;
             amplitude: string;
             highLow: string;
+            high: string;
+            low: string;
+            open: string;
+            prevClose: string;
             closePrice: string;
+            miniTrend: string;
+            trend: string;
+            netInflow: string;
+            lastRefresh: string;
             sync: string;
             syncSuccess: string;
             datePlaceholder: string;
@@ -1402,6 +1411,7 @@ declare namespace App {
             sync: string;
             syncSuccess: string;
             datePlaceholder: string;
+            lastRefresh: string;
           };
           limitUp: {
             title: string;
@@ -1428,6 +1438,7 @@ declare namespace App {
             main: string;
             chinext: string;
             star: string;
+            lastRefresh: string;
             sync: string;
             syncSuccess: string;
             datePlaceholder: string;
@@ -1442,6 +1453,7 @@ declare namespace App {
             hotValue: string;
             dateLabel: string;
             datePlaceholder: string;
+            lastRefresh: string;
             sync: string;
           };
         };

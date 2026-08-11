@@ -1248,9 +1248,18 @@ const local: App.I18n.Schema = {
         totalTurnover: 'Total Turnover',
         indexCount: 'Index Count',
         turnover: 'Turnover',
+        volume: 'Volume',
         amplitude: 'Amplitude',
         highLow: 'High/Low',
+        high: 'High',
+        low: 'Low',
+        open: 'Open',
+        prevClose: 'Prev Close',
         closePrice: 'Close',
+        miniTrend: 'Recent Trend',
+        trend: 'Trend',
+        netInflow: 'Net Inflow',
+        lastRefresh: 'Last Refresh',
         sync: 'Sync Data',
         syncSuccess: 'Market indices synced',
         datePlaceholder: 'Select date to view history',
@@ -1271,6 +1280,7 @@ const local: App.I18n.Schema = {
         sortByNetInflow: 'By Fund Flow',
         desc: 'Desc',
         asc: 'Asc',
+        lastRefresh: 'Last Refresh',
         sync: 'Sync Data',
         syncSuccess: 'Board data synced',
         datePlaceholder: 'Select date to view history'
@@ -1300,6 +1310,7 @@ const local: App.I18n.Schema = {
         main: 'Main Board',
         chinext: 'ChiNext',
         star: 'STAR',
+        lastRefresh: 'Last Refresh',
         sync: 'Sync Data',
         syncSuccess: 'Limit-up pool synced',
         datePlaceholder: 'Select date to view history'
@@ -1314,6 +1325,7 @@ const local: App.I18n.Schema = {
         hotValue: 'Heat',
         dateLabel: 'Date',
         datePlaceholder: 'Select date to view history',
+        lastRefresh: 'Last Refresh',
         sync: 'Sync Data'
       }
     }
