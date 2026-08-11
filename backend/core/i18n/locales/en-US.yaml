@@ -96,6 +96,15 @@ error:
   news:
     not_found: "News not found (id={id})"
     sync_failed: "News sync failed"
+  ai_model:
+    not_found: "AI model not found (id={id})"
+    name_exist: "Model configuration name already exists"
+    is_default: "This model is the default model and cannot be deleted. Transfer the default setting first."
+    in_use: "This model is referenced by a function binding and cannot be deleted. Remove the binding first."
+    binding_not_found: "Function binding not found"
+    disabled: "The selected model is disabled and cannot be bound"
+    test_success: "Connection test succeeded (latency {latency}ms)"
+    test_failed: "Connection test failed"
 
   open_api:
     missing_header: "Missing required signature header"
@@ -292,6 +301,16 @@ merchant:
   app_id_conflict: "AppId generation conflict, please retry"
   app_id_conflict_short: "AppId conflict, please retry"
 
+ai_model:
+  not_found: "AI model not found (id={id})"
+  name_exist: "Model configuration name already exists"
+  is_default: "This model is the default model and cannot be deleted. Transfer the default setting first."
+  in_use: "This model is referenced by a function binding and cannot be deleted. Remove the binding first."
+  binding_not_found: "Function binding not found"
+  disabled: "The selected model is disabled and cannot be bound"
+  test_success: "Connection test succeeded (latency {latency}ms)"
+  test_failed: "Connection test failed"
+
 file:
   upload_success: "Uploaded successfully"
   batch_upload_success: "Uploaded {count} file(s)"
@@ -408,3 +427,9 @@ rate_limit:
 security:
   request_too_large: "Request body too large"
   invalid_content_length: "Invalid Content-Length"
+
+stock:
+  sync_failed: "Stock data sync failed"
+  no_data: "No market data available"
+  index_not_found: "Index {code} not found"
+  board_not_found: "Board {code} not found"

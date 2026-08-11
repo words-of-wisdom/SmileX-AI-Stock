@@ -294,7 +294,7 @@ def _make_jin10_fetcher(key: str, name: str, important_only: bool = False) -> Ca
                 title = m.group(1) if m else _strip_html(content)[:80]
             items.append(_item(
                 title=title,
-                url=f"https://flash-api.jin10.com/detail/{row.get('id')}",
+                url=f"https://flash-api.jin10.com/detail/{row.get('id')}#{key}",
                 source=key, source_name=name,
                 summary=_strip_html(content)[:1000],
                 content=content,

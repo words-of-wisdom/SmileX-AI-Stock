@@ -103,6 +103,15 @@ error:
   news:
     not_found: "新闻不存在 (id={id})"
     sync_failed: "新闻同步失败"
+  ai_model:
+    not_found: "AI 模型不存在 (id={id})"
+    name_exist: "模型配置名称已存在"
+    is_default: "该模型为默认模型，无法删除，请先转移默认设置"
+    in_use: "该模型已被场景绑定引用，无法删除，请先解除绑定"
+    binding_not_found: "场景绑定不存在"
+    disabled: "所选模型未启用，无法绑定"
+    test_success: "连接测试成功（延迟 {latency}ms）"
+    test_failed: "连接测试失败"
 
   open_api:
     missing_header: "缺少必要的签名请求头"
@@ -299,6 +308,16 @@ merchant:
   app_id_conflict: "AppId 生成冲突，请重试"
   app_id_conflict_short: "AppId 冲突，请重试"
 
+ai_model:
+  not_found: "AI 模型不存在 (id={id})"
+  name_exist: "模型配置名称已存在"
+  is_default: "该模型为默认模型，无法删除，请先转移默认设置"
+  in_use: "该模型已被场景绑定引用，无法删除，请先解除绑定"
+  binding_not_found: "场景绑定不存在"
+  disabled: "所选模型未启用，无法绑定"
+  test_success: "连接测试成功（延迟 {latency}ms）"
+  test_failed: "连接测试失败"
+
 file:
   upload_success: "上传成功"
   batch_upload_success: "成功上传 {count} 个文件"
@@ -415,3 +434,9 @@ rate_limit:
 security:
   request_too_large: "请求体过大"
   invalid_content_length: "非法 Content-Length"
+
+stock:
+  sync_failed: "股票数据同步失败"
+  no_data: "暂无行情数据"
+  index_not_found: "指数 {code} 不存在"
+  board_not_found: "板块 {code} 不存在"

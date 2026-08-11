@@ -668,6 +668,30 @@ declare namespace App {
             status: string;
             requestId: string;
           };
+          stockSdk: {
+            title: string;
+            tip: string;
+            akshareTitle: string;
+            symbol: string;
+            symbolPlaceholder: string;
+            baostockTitle: string;
+            code: string;
+            codePlaceholder: string;
+            days: string;
+            query: string;
+            empty: string;
+            resultCount: string;
+            item: string;
+            value: string;
+            date: string;
+            open: string;
+            high: string;
+            low: string;
+            close: string;
+            volume: string;
+            amount: string;
+            pctChg: string;
+          };
           upload: {
             title: string;
             singleUpload: string;
@@ -912,12 +936,50 @@ declare namespace App {
             editDict: string;
             addDictItem: string;
             editDictItem: string;
-            pleaseSelectDict: string;
-          };
-          config: {
+           pleaseSelectDict: string;
+         };
+          aiModel: {
             title: string;
-            configKey: string;
-            configValue: string;
+            modelName: string;
+            provider: string;
+            modelId: string;
+            baseUrl: string;
+            apiKey: string;
+            temperature: string;
+            maxTokens: string;
+            isDefault: string;
+            status: string;
+            remark: string;
+            addModel: string;
+            editModel: string;
+            modelManage: string;
+            bindingManage: string;
+            bindingTitle: string;
+            function: string;
+            boundModel: string;
+            bindingStatus: string;
+            bindingTip: string;
+            useDefault: string;
+            selectModel: string;
+            selectModelFirst: string;
+            testConnection: string;
+            testFailed: string;
+            form: {
+              modelName: string;
+              provider: string;
+              modelId: string;
+              baseUrl: string;
+              apiKey: string;
+              apiKeyEditHint: string;
+              remark: string;
+              status: string;
+              isDefault: string;
+            };
+          };
+         config: {
+           title: string;
+           configKey: string;
+           configValue: string;
             defaultValue: string;
             configDesc: string;
             configType: string;
@@ -1301,15 +1363,92 @@ declare namespace App {
           dateRange: string;
           allSources: string;
           viewOriginal: string;
-         form: {
-           keyword: string;
-            source: string;
-         };
-       };
-     };
-     form: {
-       required: string;
-        userName: FormMsg;
+        form: {
+          keyword: string;
+           source: string;
+        };
+        };
+        aStock: {
+          marketOverview: {
+            title: string;
+            todayMarket: string;
+            historyMarket: string;
+            totalTurnover: string;
+            indexCount: string;
+            turnover: string;
+            amplitude: string;
+            highLow: string;
+            closePrice: string;
+            sync: string;
+            syncSuccess: string;
+            datePlaceholder: string;
+            noData: string;
+          };
+          industryBoard: {
+            title: string;
+            industry: string;
+            concept: string;
+            boardName: string;
+            changePct: string;
+            turnover: string;
+            turnoverRate: string;
+            netInflow: string;
+            breadth: string;
+            leadingStock: string;
+            sortByChangePct: string;
+            sortByNetInflow: string;
+            desc: string;
+            asc: string;
+            sync: string;
+            syncSuccess: string;
+            datePlaceholder: string;
+          };
+          limitUp: {
+            title: string;
+            totalCount: string;
+            mainCount: string;
+            chinextCount: string;
+            starCount: string;
+            bseCount: string;
+            maxConsecutive: string;
+            stockCode: string;
+            stockName: string;
+            marketBoard: string;
+            latestPrice: string;
+            changePct: string;
+            turnoverRate: string;
+            turnover: string;
+            amplitude: string;
+            firstSeal: string;
+            lastSeal: string;
+            consecutive: string;
+            industry: string;
+            reason: string;
+            all: string;
+            main: string;
+            chinext: string;
+            star: string;
+            sync: string;
+            syncSuccess: string;
+            datePlaceholder: string;
+          };
+          stockHot: {
+            title: string;
+            rank: string;
+            stockName: string;
+            stockCode: string;
+            latestPrice: string;
+            changePct: string;
+            hotValue: string;
+            dateLabel: string;
+            datePlaceholder: string;
+            sync: string;
+          };
+        };
+      };
+  form: {
+    required: string;
+      userName: FormMsg;
         phone: FormMsg;
         pwd: FormMsg;
         confirmPwd: FormMsg;

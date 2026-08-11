@@ -40,6 +40,53 @@ export const generatedRoutes: GeneratedRoute[] = [
     }
   },
   {
+    name: 'a-stock',
+    path: '/a-stock',
+    component: 'layout.base',
+    meta: {
+      title: 'a-stock',
+      i18nKey: 'route.a-stock'
+    },
+    children: [
+      {
+        name: 'a-stock_industry-board',
+        path: '/a-stock/industry-board',
+        component: 'view.a-stock_industry-board',
+        meta: {
+          title: 'a-stock_industry-board',
+          i18nKey: 'route.a-stock_industry-board'
+        }
+      },
+      {
+        name: 'a-stock_limit-up',
+        path: '/a-stock/limit-up',
+        component: 'view.a-stock_limit-up',
+        meta: {
+          title: 'a-stock_limit-up',
+          i18nKey: 'route.a-stock_limit-up'
+        }
+      },
+      {
+        name: 'a-stock_market-overview',
+        path: '/a-stock/market-overview',
+        component: 'view.a-stock_market-overview',
+        meta: {
+          title: 'a-stock_market-overview',
+          i18nKey: 'route.a-stock_market-overview'
+        }
+      },
+      {
+        name: 'a-stock_stock-hot',
+        path: '/a-stock/stock-hot',
+        component: 'view.a-stock_stock-hot',
+        meta: {
+          title: 'a-stock_stock-hot',
+          i18nKey: 'route.a-stock_stock-hot'
+        }
+      }
+    ]
+  },
+  {
     name: 'about',
     path: '/about',
     component: 'layout.base$view.about',
@@ -50,6 +97,26 @@ export const generatedRoutes: GeneratedRoute[] = [
       icon: 'mdi:information-outline',
       order: 9999
     }
+  },
+  {
+    name: 'ai',
+    path: '/ai',
+    component: 'layout.base',
+    meta: {
+      title: 'ai',
+      i18nKey: 'route.ai'
+    },
+    children: [
+      {
+        name: 'ai_model',
+        path: '/ai/model',
+        component: 'view.ai_model',
+        meta: {
+          title: 'ai_model',
+          i18nKey: 'route.ai_model'
+        }
+      }
+    ]
   },
   {
     name: 'business',
@@ -148,6 +215,26 @@ export const generatedRoutes: GeneratedRoute[] = [
       hideInMenu: true,
       keepAlive: true
     }
+  },
+  {
+    name: 'info',
+    path: '/info',
+    component: 'layout.base',
+    meta: {
+      title: 'info',
+      i18nKey: 'route.info'
+    },
+    children: [
+      {
+        name: 'info_news',
+        path: '/info/news',
+        component: 'view.info_news',
+        meta: {
+          title: 'info_news',
+          i18nKey: 'route.info_news'
+        }
+      }
+    ]
   },
   {
     name: 'log',
@@ -331,17 +418,6 @@ export const generatedRoutes: GeneratedRoute[] = [
       i18nKey: 'route.monitor',
       icon: 'mdi:chart-areaspline-variant',
       order: 4
-    }
-  },
-  {
-    name: 'news',
-    path: '/news',
-    component: 'layout.base$view.news',
-    meta: {
-      title: 'news',
-      i18nKey: 'route.news',
-      icon: 'mdi:newspaper-variant',
-      order: 5
     }
   },
   {

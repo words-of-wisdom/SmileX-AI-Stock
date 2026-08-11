@@ -21,6 +21,7 @@ from .openapi_log_service import OpenapiLogService
 from .notice_service import NoticeService
 from .monitor_service import MonitorService
 from .file_service import FileService
+from .ai_model_service import AiModelService
 
 __all__ = [
     "ConfigService",
@@ -40,4 +41,5 @@ __all__ = [
     "NoticeService",
     "MonitorService",
     "FileService",
+    "AiModelService",
 ]

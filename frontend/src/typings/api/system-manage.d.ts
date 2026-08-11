@@ -664,9 +664,92 @@ declare namespace Api {
       expire_at?: string | null;
     };
 
-    /** IP 黑名单批量删除 */
-    type IpBlacklistBatchDelete = {
-      ids: number[];
+   /** IP 黑名单批量删除 */
+   type IpBlacklistBatchDelete = {
+     ids: number[];
+   };
+    /** AI 模型提供商 */
+   type AiProvider = 'openai' | 'anthropic' | 'deepseek' | 'qwen' | 'zhipu' | 'custom';
+    /** AI 功能场景 */
+    type AiFunction =
+      | 'stock_picking'
+      | 'sentiment_analysis'
+      | 'news_summary'
+      | 'chat_qa'
+      | 'trend_prediction';
+    /** AI 模型配置 */
+    type AiModel = Common.CommonRecord<{
+      name: string;
+      provider: AiProvider;
+      base_url: string;
+      api_key_masked: string | null;
+      model_name: string;
+      temperature: number | null;
+      max_tokens: number | null;
+      is_default: Common.EnableStatus;
+      remark: string | null;
+    }>;
+    /** AI 模型搜索参数 */
+    type AiModelSearchParams = CommonType.RecordNullable<
+      Pick<AiModel, 'name' | 'provider' | 'status' | 'is_default'> & CommonSearchParams
+    >;
+    /** AI 模型列表 */
+    type AiModelList = Common.PaginatingQueryRecord<AiModel>;
+    /** AI 模型简单（下拉用） */
+    type AiModelSimple = {
+      id: number;
+      name: string;
+      model_name: string;
+      provider: AiProvider;
+      is_default: Common.EnableStatus;
+    };
+    /** AI 模型创建 */
+    type AiModelCreate = {
+      name: string;
+      provider: AiProvider;
+      base_url: string;
+      api_key: string;
+      model_name: string;
+      temperature?: number | null;
+      max_tokens?: number | null;
+      is_default: Common.EnableStatus;
+      status: Common.EnableStatus;
+      remark?: string;
+    };
+    /** AI 模型更新 */
+    type AiModelUpdate = Partial<Omit<AiModelCreate, 'api_key'>> & {
+      api_key?: string;
+    };
+    /** AI 模型批量更新状态 */
+    type AiModelBatchUpdateStatus = {
+      model_ids: number[];
+      status: Common.EnableStatus;
+    };
+    /** AI 场景模型绑定 */
+    type AiModelBinding = {
+      id: number;
+      function_code: AiFunction;
+      model_id: number;
+      status: Common.EnableStatus;
+      remark: string | null;
+      model_name: string | null;
+      provider: AiProvider | null;
+      created_at: string;
+      updated_at: string | null;
+    };
+    /** AI 场景绑定 upsert */
+    type AiModelBindingUpsert = {
+      model_id: number;
+      status: Common.EnableStatus;
+      remark?: string;
+    };
+    /** AI 模型连接测试结果 */
+    type AiModelTestResult = {
+      success: boolean;
+      latency_ms: number;
+      message: string;
+      provider: AiProvider;
+      model_name: string;
     };
   }
 }

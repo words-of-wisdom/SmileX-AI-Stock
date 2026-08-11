@@ -1,0 +1,110 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
+"""
+Baostock 数据源辅助层
+作为 akshare（东财）接口的降级源：东财限流/异常时兜底抓取
+
+注意：baostock 是全局单连接协议，login/query/logout 必须在同一线程内串行完成，
+不能跨线程并发调用。日线数据盘后更新（当日 bar 一般晚间才可用）。
+"""
+import asyncio
+import logging
+
+from modules.stock.services._common import num
+
+logger = logging.getLogger(__name__)
+
+# 查询字段（指数日线）
+_INDEX_FIELDS = "date,open,high,low,close,preclose,volume,amount,pctChg"
+
+
+def to_bs_code(index_code: str) -> str:
+    """纯数字指数代码转 baostock 格式：000001 -> sh.000001，399001 -> sz.399001"""
+    code = index_code.strip()
+    if code.startswith(("0", "5")):
+        return f"sh.{code}"
+    return f"sz.{code}"
+
+
+def _fmt_date(d: str) -> str:
+    """兼容 YYYYMMDD / YYYY-MM-DD 两种入参，统一输出 YYYY-MM-DD"""
+    d = d.strip()
+    if len(d) == 8 and "-" not in d:
+        return f"{d[:4]}-{d[4:6]}-{d[6:]}"
+    return d
+
+
+def _bar_to_item(row: dict) -> dict:
+    """baostock 行数据转标准化 dict（与 market_fetcher 输出契约一致）"""
+    close = num(row.get("close"))
+    preclose = num(row.get("preclose"))
+    high = num(row.get("high"))
+    low = num(row.get("low"))
+    return {
+        "record_date": row.get("date") or None,
+        "open": num(row.get("open")),
+        "high": high,
+        "low": low,
+        "latest_price": close,
+        "prev_close": preclose,
+        "change_pct": num(row.get("pctChg")),
+        "change_amount": round(close - preclose, 4)
+        if close is not None and preclose is not None
+        else None,
+        "volume": num(row.get("volume")),
+        "turnover": num(row.get("amount")),
+        "amplitude": round((high - low) / preclose * 100, 4)
+        if high is not None and low is not None and preclose
+        else None,
+    }
+
+
+def _query_index_daily(
+    codes: list[str], start_date: str, end_date: str
+) -> dict[str, list[dict]]:
+    """（同步）登录 baostock 并逐个查询指数日线，返回 {code: [bar, ...]}（按日期升序）"""
+    import baostock as bs
+
+    lg = bs.login()
+    if lg.error_code != "0":
+        raise RuntimeError(f"baostock 登录失败: {lg.error_msg}")
+
+    result: dict[str, list[dict]] = {}
+    try:
+        for code in codes:
+            rs = bs.query_history_k_data_plus(
+                to_bs_code(code),
+                _INDEX_FIELDS,
+                start_date=_fmt_date(start_date),
+                end_date=_fmt_date(end_date),
+                frequency="d",
+                adjustflag="3",
+            )
+            if rs.error_code != "0":
+                logger.warning("baostock 查询指数 %s 失败: %s", code, rs.error_msg)
+                result[code] = []
+                continue
+            fields = _INDEX_FIELDS.split(",")
+            bars = []
+            while rs.next():
+                bars.append(_bar_to_item(dict(zip(fields, rs.get_row_data()))))
+            result[code] = bars
+    finally:
+        bs.logout()
+    return result
+
+
+async def fetch_index_daily_bars(
+    codes: list[str], start_date: str, end_date: str
+) -> dict[str, list[dict]]:
+    """异步入口：批量查询指数日线数据（akshare 降级用）
+
+    Args:
+        codes: 纯数字指数代码列表，如 ["000001", "399001"]
+        start_date / end_date: YYYYMMDD 或 YYYY-MM-DD
+
+    Returns:
+        {code: [bar, ...]}，bar 为标准化 dict，按日期升序
+    """
+    return await asyncio.to_thread(_query_index_daily, codes, start_date, end_date)

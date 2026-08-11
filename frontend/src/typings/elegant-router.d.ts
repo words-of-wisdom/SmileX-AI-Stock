@@ -20,7 +20,14 @@ declare module "@elegant-router/types" {
     "403": "/403";
     "404": "/404";
     "500": "/500";
+    "a-stock": "/a-stock";
+    "a-stock_industry-board": "/a-stock/industry-board";
+    "a-stock_limit-up": "/a-stock/limit-up";
+    "a-stock_market-overview": "/a-stock/market-overview";
+    "a-stock_stock-hot": "/a-stock/stock-hot";
     "about": "/about";
+    "ai": "/ai";
+    "ai_model": "/ai/model";
     "business": "/business";
     "business_app-user": "/business/app-user";
     "demo": "/demo";
@@ -30,6 +37,8 @@ declare module "@elegant-router/types" {
     "export-record": "/export-record";
     "home": "/home";
     "iframe-page": "/iframe-page/:url";
+    "info": "/info";
+    "info_news": "/info/news";
     "log": "/log";
     "log_login-log": "/log/login-log";
     "log_online-user": "/log/online-user";
@@ -49,7 +58,6 @@ declare module "@elegant-router/types" {
     "merchant-open_merchant": "/merchant-open/merchant";
     "merchant-open_openapi-log": "/merchant-open/openapi-log";
     "monitor": "/monitor";
-    "news": "/news";
     "scheduler": "/scheduler";
     "scheduler_log": "/scheduler/log";
     "scheduler_task": "/scheduler/task";
@@ -87,18 +95,20 @@ declare module "@elegant-router/types" {
     | "403"
     | "404"
     | "500"
+    | "a-stock"
     | "about"
+    | "ai"
     | "business"
     | "demo"
     | "export-record"
     | "home"
     | "iframe-page"
+    | "info"
     | "log"
     | "login"
     | "manage"
     | "merchant-open"
     | "monitor"
-    | "news"
     | "scheduler"
   >;
 
@@ -121,13 +131,19 @@ declare module "@elegant-router/types" {
     | "500"
     | "iframe-page"
     | "login"
+    | "a-stock_industry-board"
+    | "a-stock_limit-up"
+    | "a-stock_market-overview"
+    | "a-stock_stock-hot"
     | "about"
+    | "ai_model"
     | "business_app-user"
     | "demo_dict"
     | "demo_openapi-test"
     | "demo_upload"
     | "export-record"
     | "home"
+    | "info_news"
     | "log_login-log"
     | "log_online-user"
     | "log_operation-log"
@@ -143,7 +159,6 @@ declare module "@elegant-router/types" {
     | "merchant-open_merchant"
     | "merchant-open_openapi-log"
     | "monitor"
-    | "news"
     | "scheduler_log"
     | "scheduler_task"
   >;

@@ -1,0 +1,189 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
+"""
+A股行情快照表
+- 大盘指数日快照
+- 行业/概念板块日快照
+- 涨停股池日快照
+"""
+
+from datetime import date
+from typing import Optional
+
+from sqlalchemy import (
+    String,
+    Integer,
+    Numeric,
+    Date,
+    UniqueConstraint,
+)
+from sqlalchemy.orm import mapped_column, Mapped
+
+from database.models.base import Base
+
+
+class BusinessMarketIndexDaily(Base):
+    """大盘指数日快照表"""
+
+    __table_args__ = (
+        UniqueConstraint(
+            "record_date",
+            "index_code",
+            name="uk_market_index_daily_date_code",
+        ),
+        {"comment": "大盘指数日快照表"},
+    )
+
+    record_date: Mapped[date] = mapped_column(
+        Date, nullable=False, index=True, comment="快照日期（本地时区）"
+    )
+    index_code: Mapped[str] = mapped_column(
+        String(20), nullable=False, index=True, comment="指数代码"
+    )
+    index_name: Mapped[str] = mapped_column(String(50), nullable=False, comment="指数名称")
+    latest_price: Mapped[Optional[float]] = mapped_column(
+        Numeric(16, 4), nullable=True, comment="最新价", default=None
+    )
+    change_pct: Mapped[Optional[float]] = mapped_column(
+        Numeric(8, 4), nullable=True, comment="涨跌幅(%)", default=None
+    )
+    change_amount: Mapped[Optional[float]] = mapped_column(
+        Numeric(16, 4), nullable=True, comment="涨跌额", default=None
+    )
+    volume: Mapped[Optional[float]] = mapped_column(
+        Numeric(20, 2), nullable=True, comment="成交量(手)", default=None
+    )
+    turnover: Mapped[Optional[float]] = mapped_column(
+        Numeric(20, 2), nullable=True, comment="成交额(元)", default=None
+    )
+    amplitude: Mapped[Optional[float]] = mapped_column(
+        Numeric(8, 4), nullable=True, comment="振幅(%)", default=None
+    )
+    high: Mapped[Optional[float]] = mapped_column(
+        Numeric(16, 4), nullable=True, comment="最高", default=None
+    )
+    low: Mapped[Optional[float]] = mapped_column(
+        Numeric(16, 4), nullable=True, comment="最低", default=None
+    )
+    open: Mapped[Optional[float]] = mapped_column(
+        Numeric(16, 4), nullable=True, comment="今开", default=None
+    )
+    prev_close: Mapped[Optional[float]] = mapped_column(
+        Numeric(16, 4), nullable=True, comment="昨收", default=None
+    )
+
+
+class BusinessBoardDaily(Base):
+    """行业/概念板块日快照表"""
+
+    __table_args__ = (
+        UniqueConstraint(
+            "record_date",
+            "board_type",
+            "board_code",
+            name="uk_board_daily_date_type_code",
+        ),
+        {"comment": "行业/概念板块日快照表"},
+    )
+
+    record_date: Mapped[date] = mapped_column(
+        Date, nullable=False, index=True, comment="快照日期（本地时区）"
+    )
+    board_type: Mapped[str] = mapped_column(
+        String(20), nullable=False, index=True, comment="板块类型: industry/concept"
+    )
+    board_code: Mapped[str] = mapped_column(
+        String(20), nullable=False, index=True, comment="板块代码"
+    )
+    board_name: Mapped[str] = mapped_column(String(100), nullable=False, comment="板块名称")
+    change_pct: Mapped[Optional[float]] = mapped_column(
+        Numeric(8, 4), nullable=True, comment="涨跌幅(%)", default=None
+    )
+    turnover: Mapped[Optional[float]] = mapped_column(
+        Numeric(20, 2), nullable=True, comment="成交额(元)", default=None
+    )
+    turnover_rate: Mapped[Optional[float]] = mapped_column(
+        Numeric(8, 4), nullable=True, comment="换手率(%)", default=None
+    )
+    volume: Mapped[Optional[float]] = mapped_column(
+        Numeric(20, 2), nullable=True, comment="成交量(手)", default=None
+    )
+    net_inflow: Mapped[Optional[float]] = mapped_column(
+        Numeric(20, 2), nullable=True, comment="主力净流入(元)", default=None
+    )
+    rising_count: Mapped[Optional[int]] = mapped_column(
+        Integer, nullable=True, comment="上涨家数", default=None
+    )
+    falling_count: Mapped[Optional[int]] = mapped_column(
+        Integer, nullable=True, comment="下跌家数", default=None
+    )
+    leading_stock_code: Mapped[Optional[str]] = mapped_column(
+        String(20), nullable=True, comment="领涨股代码", default=None
+    )
+    leading_stock_name: Mapped[Optional[str]] = mapped_column(
+        String(50), nullable=True, comment="领涨股名称", default=None
+    )
+    leading_stock_change_pct: Mapped[Optional[float]] = mapped_column(
+        Numeric(8, 4), nullable=True, comment="领涨股涨跌幅(%)", default=None
+    )
+
+
+class BusinessLimitUpStock(Base):
+    """涨停股池日快照表"""
+
+    __table_args__ = (
+        UniqueConstraint(
+            "record_date",
+            "stock_code",
+            name="uk_limit_up_daily_date_code",
+        ),
+        {"comment": "涨停股池日快照表"},
+    )
+
+    record_date: Mapped[date] = mapped_column(
+        Date, nullable=False, index=True, comment="快照日期（本地时区）"
+    )
+    stock_code: Mapped[str] = mapped_column(
+        String(20), nullable=False, index=True, comment="股票代码"
+    )
+    stock_name: Mapped[str] = mapped_column(String(50), nullable=False, comment="股票名称")
+    market_board: Mapped[str] = mapped_column(
+        String(20), nullable=False, index=True, comment="市场板块: main/chinext/star/bse"
+    )
+    latest_price: Mapped[Optional[float]] = mapped_column(
+        Numeric(16, 4), nullable=True, comment="最新价", default=None
+    )
+    change_pct: Mapped[Optional[float]] = mapped_column(
+        Numeric(8, 4), nullable=True, comment="涨跌幅(%)", default=None
+    )
+    turnover_rate: Mapped[Optional[float]] = mapped_column(
+        Numeric(8, 4), nullable=True, comment="换手率(%)", default=None
+    )
+    turnover: Mapped[Optional[float]] = mapped_column(
+        Numeric(20, 2), nullable=True, comment="成交额(元)", default=None
+    )
+    amplitude: Mapped[Optional[float]] = mapped_column(
+        Numeric(8, 4), nullable=True, comment="振幅(%)", default=None
+    )
+    seal_amount: Mapped[Optional[float]] = mapped_column(
+        Numeric(20, 2), nullable=True, comment="封板资金(元)", default=None
+    )
+    first_limit_up_time: Mapped[Optional[str]] = mapped_column(
+        String(20), nullable=True, comment="首次封板时间", default=None
+    )
+    last_limit_up_time: Mapped[Optional[str]] = mapped_column(
+        String(20), nullable=True, comment="最后封板时间", default=None
+    )
+    break_count: Mapped[Optional[int]] = mapped_column(
+        Integer, nullable=True, comment="炸板次数", default=None
+    )
+    consecutive_limit_up: Mapped[Optional[int]] = mapped_column(
+        Integer, nullable=True, comment="连板数", default=None
+    )
+    industry: Mapped[Optional[str]] = mapped_column(
+        String(100), nullable=True, comment="所属行业", default=None
+    )
+    limit_up_reason: Mapped[Optional[str]] = mapped_column(
+        String(500), nullable=True, comment="涨停原因", default=None
+    )

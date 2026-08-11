@@ -10,6 +10,13 @@
 
 详细索引见 [business/README.md](./business/README.md)。近期：
 
+- [2026-08-11 A股大盘指数多源降级（akshare+Baostock+新浪）](./business/2026-08-11_astock_multi_source_fallback.md) — 大盘指数抓取三级降级链（东财→baostock→sina），历史查询不足自动回补入库；baostock 不覆盖科创50由 sina 补齐，板块/涨停池仍仅东财源
+- [2026-08-10 AI 助手目录 + LLM 配置菜单调整](./business/2026-08-10_ai_assistant_menu.md) — 将「AI 配置」一级目录改名为「AI 助手」，子菜单「AI 模型配置」改名为「LLM 配置」；运行库 alembic 停在 0004 致 AI 菜单不可见，直接修复 sys_menu 数据 + 调整前端 i18n 文案；路由名 ai/ai_model 不变
+- [2026-08-10 AI 模型配置功能](./business/2026-08-10_ai_model_config.md) — 新增「AI 模型配置」后台管理模块：多厂商模型 CRUD（OpenAI/Anthropic/DeepSeek/通义千问/智谱/自定义 OpenAI 兼容）+ 唯一默认模型 + 固定枚举场景绑定（智能选股/舆情分析/新闻摘要/对话问答/趋势预测）+ API Key Fernet 加密存储与脱敏显示 + httpx 连接测试（OpenAI 兼容族 Bearer token / Anthropic x-api-key）；两张新表 sys_ai_model/sys_ai_model_binding + 菜单种子迁移；前端 views/manage/ai-model 双 Tab 页面；错误码 10801-10806
+
+
+- [2026-08-10 股票热榜 + 资讯菜单重组](./business/2026-08-10_stock_hot_rank.md) — 新增「资讯」一级目录，资讯聚合降为子菜单，新增「股票热榜」（东财/雪球/同花顺热榜抓取，快照入库，每日排名变化跟踪）；akshare 无同花顺热榜故自研 httpx 抓取
+- [2026-08-10 股票热榜跳转与雪球/同花顺加载修复](./business/2026-08-10_stock_hot_rank_fix.md) — 雪球代码带 SH/SZ 前缀致前端拼出 `SZSH600519` 跳转 404（统一 stock_code 为纯数字）；雪球全量 5000+ 截断 Top100；同花顺原抓龙虎榜 JS 页必失败，改用富贵 hot_list JSON 接口；sync 清理当天带前缀脏数据；前端加北交所 BJ
 - [2026-07-29 后端响应消息 i18n](./business/2026-07-29_backend_response_i18n.md) — 新增 `core/i18n/`（YAML key 目录 + `t()` + `Accept-Language` 解析 + 语言 ContextVar），`CustomResponseCode`/`CustomErrorCode` 的 `.msg` 按 key 懒翻译，异常类 `default_msg_key`，全量迁移约 350 条 inline 中文为 `t()`；前端 `onRequest` 注入 `Accept-Language: getLocale()`；仅 zh-CN/en-US，新增语言加 yaml 即可；日志/描述/基础设施错误不翻译
 - [2026-07-28 应用用户（AppUser）后台管理](./business/2026-07-28_app_user_admin_manage.md) — AppUser 加 status/avatar/last_login_* + admin 模块 CRUD（`/admin/sys/app-user/*`）+ C 端 login/current_user 检查 status（禁用生效）+ 禁用/改密/删除复用 `OnlineUserService.kick_all_sessions` 吊销 session；前端 views/business/app-user + "业务管理"目录菜单（不分配角色）
 - [2026-07-28 后端 Web 安全加固](./business/2026-07-28_security_hardening.md) — 5 项：文件上传 magic number 三方校验 + 白名单收紧；预览改 scoped token；admin/app 补 logout + 修 App session key Bug；JWT jti 黑名单；HSTS 部署 checklist

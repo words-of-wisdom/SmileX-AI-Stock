@@ -835,3 +835,120 @@ export function fetchDeleteOpenapiLog(logId: number) {
     method: 'delete'
   });
 }
+
+// ===================== AI 模型配置 =====================
+
+/** get ai model list */
+export function fetchGetAiModelList(params?: Api.SystemManage.AiModelSearchParams) {
+  return request<Api.SystemManage.AiModelList>({
+    url: '/admin/sys/ai-model/list',
+    method: 'get',
+    params
+  });
+}
+
+/** get all enabled ai models (for dropdown) */
+export function fetchGetAllAiModels() {
+  return request<Api.SystemManage.AiModelSimple[]>({
+    url: '/admin/sys/ai-model/all',
+    method: 'get'
+  });
+}
+
+/** get ai model by id */
+export function fetchGetAiModel(modelId: number) {
+  return request<Api.SystemManage.AiModel>({
+    url: `/admin/sys/ai-model/${modelId}`,
+    method: 'get'
+  });
+}
+
+/** create ai model */
+export function fetchCreateAiModel(model: Api.SystemManage.AiModelCreate) {
+  const { status, is_default, ...rest } = model;
+  return request<Api.SystemManage.AiModel>({
+    url: '/admin/sys/ai-model/add',
+    method: 'post',
+    data: {
+      ...rest,
+      status: enableStatusToBoolean(status),
+      is_default: enableStatusToBoolean(is_default)
+    }
+  });
+}
+
+/** update ai model */
+export function fetchUpdateAiModel(modelId: number, model: Api.SystemManage.AiModelUpdate) {
+  const payload: Record<string, any> = { ...model };
+  if (model.status !== undefined) {
+    payload.status = enableStatusToBoolean(model.status);
+  }
+  if (model.is_default !== undefined) {
+    payload.is_default = enableStatusToBoolean(model.is_default);
+  }
+  return request<Api.SystemManage.AiModel>({
+    url: `/admin/sys/ai-model/${modelId}`,
+    method: 'put',
+    data: payload
+  });
+}
+
+/** batch update ai model status */
+export function fetchBatchUpdateAiModelStatus(data: Api.SystemManage.AiModelBatchUpdateStatus) {
+  return request<Api.SystemManage.AiModel>({
+    url: '/admin/sys/ai-model/batch/status',
+    method: 'put',
+    data: {
+      model_ids: data.model_ids,
+      status: enableStatusToBoolean(data.status)
+    }
+  });
+}
+
+/** delete ai model */
+export function fetchDeleteAiModel(modelId: number) {
+  return request<void>({
+    url: `/admin/sys/ai-model/${modelId}`,
+    method: 'delete'
+  });
+}
+
+/** test ai model connection */
+export function fetchTestAiModel(modelId: number) {
+  return request<Api.SystemManage.AiModelTestResult>({
+    url: `/admin/sys/ai-model/${modelId}/test`,
+    method: 'post'
+  });
+}
+
+/** get ai model binding list */
+export function fetchGetAiModelBindingList() {
+  return request<Api.SystemManage.AiModelBinding[]>({
+    url: '/admin/sys/ai-model/binding/list',
+    method: 'get'
+  });
+}
+
+/** upsert ai model binding */
+export function fetchUpsertAiModelBinding(
+  functionCode: Api.SystemManage.AiFunction,
+  data: Api.SystemManage.AiModelBindingUpsert
+) {
+  return request<Api.SystemManage.AiModelBinding>({
+    url: `/admin/sys/ai-model/binding/${functionCode}`,
+    method: 'put',
+    data: {
+      model_id: data.model_id,
+      status: enableStatusToBoolean(data.status),
+      remark: data.remark
+    }
+  });
+}
+
+/** delete ai model binding */
+export function fetchDeleteAiModelBinding(functionCode: Api.SystemManage.AiFunction) {
+  return request<void>({
+    url: `/admin/sys/ai-model/binding/${functionCode}`,
+    method: 'delete'
+  });
+}

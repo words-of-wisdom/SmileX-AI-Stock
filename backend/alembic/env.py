@@ -46,6 +46,12 @@ from database.models.sys.notice_read import SysNoticeRead
 from database.models.sys.login_log import SysLoginLog
 from database.models.business.user import AppUser
 from database.models.business.news import BusinessNews, BusinessNewsSyncLog
+from database.models.business.stock_hot import BusinessStockHotRank, BusinessStockHotSyncLog
+from database.models.business.stock_market import (
+    BusinessMarketIndexDaily,
+    BusinessBoardDaily,
+    BusinessLimitUpStock,
+)
 from database.models.sys.scheduled_task import SysScheduledTask
 from database.models.sys.task_log import SysScheduledTaskLog
 

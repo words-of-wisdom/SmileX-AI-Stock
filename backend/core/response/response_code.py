@@ -116,6 +116,18 @@ class CustomErrorCode(CustomCodeBase):
     # 新闻聚合 10701-10800
     NEWS_NOT_FOUND = (10701, "error.news.not_found")
     NEWS_SYNC_FAILED = (10702, "error.news.sync_failed")
+    # AI 模型配置 10801-10900
+    AI_MODEL_NOT_FOUND = (10801, "error.ai_model.not_found")
+    AI_MODEL_NAME_EXIST = (10802, "error.ai_model.name_exist")
+    AI_MODEL_IS_DEFAULT = (10803, "error.ai_model.is_default")
+    AI_MODEL_IN_USE = (10804, "error.ai_model.in_use")
+    AI_MODEL_BINDING_NOT_FOUND = (10805, "error.ai_model.binding_not_found")
+    AI_MODEL_DISABLED = (10806, "error.ai_model.disabled")
+    # 股票行情 11101-11200
+    STOCK_SYNC_FAILED = (11101, "stock.sync_failed")
+    STOCK_NO_DATA = (11102, "stock.no_data")
+    STOCK_INDEX_NOT_FOUND = (11103, "stock.index_not_found")
+    STOCK_BOARD_NOT_FOUND = (11104, "stock.board_not_found")
 
 @dataclass
 class CustomResponse:

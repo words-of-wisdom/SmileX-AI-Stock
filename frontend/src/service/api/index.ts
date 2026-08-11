@@ -8,3 +8,8 @@ export * from './file';
 export * from './scheduler';
 export * from './export-task';
 export * from './news';
+export * from './stock-hot';
+export * from './stock-market';
+export * from './stock-board';
+export * from './stock-limit-up';
+export * from './demo';

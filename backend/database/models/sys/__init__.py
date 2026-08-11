@@ -15,6 +15,7 @@ from .ip_blacklist import SysIpBlacklist
 from .file import SysFile
 from .scheduled_task import SysScheduledTask
 from .task_log import SysScheduledTaskLog
+from .ai_model import SysAiModel, SysAiModelBinding, AiProviderEnum, AiFunctionEnum
 
 __all__ = [
     "SysMenu",
@@ -33,4 +34,8 @@ __all__ = [
     "SysFile",
     "SysScheduledTask",
     "SysScheduledTaskLog",
+    "SysAiModel",
+    "SysAiModelBinding",
+    "AiProviderEnum",
+    "AiFunctionEnum",
 ]

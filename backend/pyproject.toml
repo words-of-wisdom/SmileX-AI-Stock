@@ -36,6 +36,7 @@ dependencies = [
     "pyyaml>=6.0",
     "greenlet>=3.3.0",
     "akshare>=1.18.83",
+    "baostock>=0.8.8",
 ]
 
 [tool.uv.workspace]
