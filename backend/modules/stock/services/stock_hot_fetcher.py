@@ -65,20 +65,51 @@ def _item(stock_code, stock_name, rank, latest_price=None, change_pct=None, hot_
 # 东方财富
 # ================================================================
 async def _fetch_em_rank(client: httpx.AsyncClient) -> list[dict]:
-    """东方财富个股人气榜（akshare stock_hot_rank_em）"""
-    import akshare as ak
+    """东方财富个股人气榜
 
-    df = await asyncio.to_thread(ak.stock_hot_rank_em)
+    akshare 的 stock_hot_rank_em 取完排名后需调用东财 push2 行情接口补价格，
+    push2 被限流/不可达时整体失败；这里拆成两步：emappdata 接口拿排名，
+    新浪 hq 批量行情补名称/最新价/涨跌幅。
+    """
+    from modules.stock.services._sina import fetch_spot_quotes
+
+    resp = await client.post(
+        "https://emappdata.eastmoney.com/stockrank/getAllCurrentList",
+        json={
+            "appId": "appId01",
+            "globalId": "786e4c21-70dc-435a-93bb-38",
+            "marketType": "",
+            "pageNo": 1,
+            "pageSize": 100,
+        },
+        timeout=15,
+    )
+    resp.raise_for_status()
+    rows = (resp.json() or {}).get("data") or []
+    if not rows:
+        raise RuntimeError("东财人气榜返回空数据")
+
+    # 报价补充失败不阻断：保留排名，名称退化为代码
+    quotes: dict[str, dict] = {}
+    try:
+        quotes = await fetch_spot_quotes(
+            [str(r["sc"]).lower() for r in rows if r.get("sc")], client=client
+        )
+    except Exception as e:
+        logger.warning("东财人气榜报价补充失败，仅保留排名: %s", e)
+
     items = []
-    for _, row in df.iterrows():
+    for row in rows:
+        sc = str(row.get("sc", "")).strip()
+        q = quotes.get(sc.lower()) or {}
         items.append(_item(
-            stock_code=row.get("代码"),
-            stock_name=row.get("股票名称"),
-            rank=row.get("当前排名"),
-            latest_price=row.get("最新价"),
-            change_pct=row.get("涨跌幅"),
+            stock_code=sc,
+            stock_name=q.get("name") or sc,
+            rank=row.get("rk"),
+            latest_price=q.get("latest_price"),
+            change_pct=q.get("change_pct"),
         ))
-    return items
+    return [it for it in items if it]
 
 
 # ================================================================

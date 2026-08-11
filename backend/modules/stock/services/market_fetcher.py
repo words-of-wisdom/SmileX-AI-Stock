@@ -3,10 +3,10 @@
 
 """
 大盘指数抓取层
-数据源降级链：akshare-东财（实时主源）→ baostock（日线兜底）→ akshare-新浪（末级兜底）
+数据源降级链：akshare-东财（实时主源）→ 新浪 hq（实时兜底）→ baostock（日线兜底）→ akshare-新浪（末级兜底）
 - 东财接口异常/限流时自动降级，保证同步链路可用
-- baostock 不覆盖科创50（000688），缺口由新浪源补齐
-- 兜底源均为日线（盘后更新），非实时
+- 东财 push2 对高频请求有 IP 级封禁，此时由新浪实时行情承接
+- baostock 为日线（盘后更新，非实时）且不覆盖科创50（000688），缺口由 akshare-新浪日线补齐
 """
 import asyncio
 import logging
@@ -14,6 +14,7 @@ from datetime import date, timedelta
 
 from modules.stock.services._baostock import fetch_index_daily_bars
 from modules.stock.services._common import num
+from modules.stock.services._sina import fetch_spot_quotes
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +39,7 @@ def _pick(df_row, *keys):
 
 
 async def fetch_index_spot() -> list[dict]:
-    """抓取主要指数实时行情，akshare 失败时自动降级 baostock 最近日线
+    """抓取主要指数实时行情，东财失败时逐级降级：新浪实时 → baostock 日线
 
     返回标准化 dict 列表，字段：
         index_code / index_name / latest_price / change_pct / change_amount /
@@ -48,8 +49,12 @@ async def fetch_index_spot() -> list[dict]:
     try:
         return await _fetch_index_spot_akshare()
     except Exception as e:
-        logger.warning("akshare 指数实时行情抓取失败，降级 baostock: %s", e)
-        return await _fetch_index_spot_baostock()
+        logger.warning("akshare 指数实时行情抓取失败，降级新浪: %s", e)
+    try:
+        return await _fetch_index_spot_sina()
+    except Exception as e:
+        logger.warning("新浪指数实时行情抓取失败，降级 baostock: %s", e)
+    return await _fetch_index_spot_baostock()
 
 
 async def _fetch_index_spot_akshare() -> list[dict]:
@@ -81,8 +86,49 @@ async def _fetch_index_spot_akshare() -> list[dict]:
             "prev_close": num(row.get("昨收")),
         })
 
-    if not items:
-        raise RuntimeError("akshare 未返回任何关注的指数数据")
+    if len(items) < len(TRACKED_INDICES):
+        # 东财限流时偶发只返回部分分页，数据不完整时按失败处理走降级，
+        # 避免写入缺指数的残缺快照
+        raise RuntimeError(
+            f"akshare 指数行情不完整: {len(items)}/{len(TRACKED_INDICES)}"
+        )
+    return items
+
+
+async def _fetch_index_spot_sina() -> list[dict]:
+    """新浪实时兜底：hq.sinajs.cn 批量行情（实时，含成交额/振幅）
+
+    覆盖全部追踪指数（含科创50），一次请求完成
+    """
+    # 沪市 0/5 开头，深市 3/1 开头（与 baostock 前缀规则一致）
+    code_map = {}
+    for it in TRACKED_INDICES:
+        prefix = "sh" if it["code"].startswith(("0", "5")) else "sz"
+        code_map[f"{prefix}{it['code']}"] = it
+
+    quotes = await fetch_spot_quotes(list(code_map))
+    items = []
+    for sina_code, tracked in code_map.items():
+        q = quotes.get(sina_code)
+        if not q or q.get("latest_price") is None:
+            continue
+        items.append({
+            "index_code": tracked["code"],
+            "index_name": tracked["name"],
+            "latest_price": q.get("latest_price"),
+            "change_pct": q.get("change_pct"),
+            "change_amount": q.get("change_amount"),
+            "volume": q.get("volume"),
+            "turnover": q.get("turnover"),
+            "amplitude": q.get("amplitude"),
+            "high": q.get("high"),
+            "low": q.get("low"),
+            "open": q.get("open"),
+            "prev_close": q.get("prev_close"),
+        })
+
+    if len(items) < len(TRACKED_INDICES):
+        raise RuntimeError(f"新浪指数行情不完整: {len(items)}/{len(TRACKED_INDICES)}")
     return items
 
 

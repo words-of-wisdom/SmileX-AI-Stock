@@ -12,6 +12,9 @@ def num(val) -> float | None:
     if val is None:
         return None
     if isinstance(val, (int, float)):
+        # NaN 直接落库会污染排序与统计，统一视为无值
+        if val != val:
+            return None
         return float(val)
     s = str(val).strip().replace("%", "").replace(",", "")
     try:

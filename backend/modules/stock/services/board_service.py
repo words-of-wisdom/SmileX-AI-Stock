@@ -8,7 +8,7 @@ import asyncio
 import logging
 from datetime import date
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -31,13 +31,32 @@ class BoardService:
         if not raw_items:
             return {"fetched": 0, "saved": 0, "board_type": board_type}
 
+        # 同批去重：行情实时变动时分页拉取可能跨页重复，同批出现重复
+        # (record_date, board_type, board_code) 会让 ON CONFLICT DO UPDATE 报错
+        seen: set[str] = set()
+        unique_items = []
+        for it in raw_items:
+            if it["board_code"] in seen:
+                continue
+            seen.add(it["board_code"])
+            unique_items.append(it)
+        if len(unique_items) != len(raw_items):
+            logger.warning(
+                "板块列表存在重复代码(%s)，已去重: %d -> %d",
+                board_type, len(raw_items), len(unique_items),
+            )
+        raw_items = unique_items
+
         # 抓取资金流数据并按板块名称映射（东财接口对高频请求有 IP 级限流，错开间隔）
         await asyncio.sleep(1.5)
         flow_map = await board_fetcher.fetch_board_fund_flow(board_type)
 
         rows = []
         for it in raw_items:
+            # 东财资金流按名称匹配优先；未命中时回退抓取层自带的净流入（同花顺兜底链有值）
             net_inflow = flow_map.get(it["board_name"])
+            if net_inflow is None:
+                net_inflow = it.get("net_inflow")
             rows.append({
                 "record_date": today,
                 "board_type": board_type,
@@ -55,6 +74,15 @@ class BoardService:
                 "leading_stock_change_pct": it.get("leading_stock_change_pct"),
                 "created_at": timezone.now(),
             })
+
+        # 先清当日同类型数据再写入：降级链换源重同步时板块代码体系不同，
+        # 仅靠 ON CONFLICT 会残留上一数据源的记录，造成同日多源混杂
+        await db.execute(
+            delete(BusinessBoardDaily).where(
+                BusinessBoardDaily.record_date == today,
+                BusinessBoardDaily.board_type == board_type,
+            )
+        )
 
         stmt = insert(BusinessBoardDaily).values(rows)
         stmt = stmt.on_conflict_do_update(

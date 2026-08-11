@@ -10,6 +10,7 @@
 
 详细索引见 [business/README.md](./business/README.md)。近期：
 
+- [2026-08-11 A股行情同步兜底扩展](./business/2026-08-11_astock_sync_fallback_extend.md) — 东财 push2 对本机 IP 拒连致大盘/板块/热榜为空：板块加腾讯行情兜底、东财人气榜改 emappdata+新浪批量行情、指数降级链插入新浪实时层且不满 7 指数视为失败、板块入库按 board_code 同批去重；行业链后补同花顺层（含成交额/净流入，换手率仅东财有）、同日重同步先删后插防多源混杂
 - [2026-08-11 A股大盘指数多源降级（akshare+Baostock+新浪）](./business/2026-08-11_astock_multi_source_fallback.md) — 大盘指数抓取三级降级链（东财→baostock→sina），历史查询不足自动回补入库；baostock 不覆盖科创50由 sina 补齐，板块/涨停池仍仅东财源
 - [2026-08-10 AI 助手目录 + LLM 配置菜单调整](./business/2026-08-10_ai_assistant_menu.md) — 将「AI 配置」一级目录改名为「AI 助手」，子菜单「AI 模型配置」改名为「LLM 配置」；运行库 alembic 停在 0004 致 AI 菜单不可见，直接修复 sys_menu 数据 + 调整前端 i18n 文案；路由名 ai/ai_model 不变
 - [2026-08-10 AI 模型配置功能](./business/2026-08-10_ai_model_config.md) — 新增「AI 模型配置」后台管理模块：多厂商模型 CRUD（OpenAI/Anthropic/DeepSeek/通义千问/智谱/自定义 OpenAI 兼容）+ 唯一默认模型 + 固定枚举场景绑定（智能选股/舆情分析/新闻摘要/对话问答/趋势预测）+ API Key Fernet 加密存储与脱敏显示 + httpx 连接测试（OpenAI 兼容族 Bearer token / Anthropic x-api-key）；两张新表 sys_ai_model/sys_ai_model_binding + 菜单种子迁移；前端 views/manage/ai-model 双 Tab 页面；错误码 10801-10806
