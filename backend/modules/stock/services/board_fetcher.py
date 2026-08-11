@@ -4,10 +4,11 @@
 """
 行业/概念板块抓取层
 数据源降级链：
-- 行业：akshare-东财（主源，含换手率/涨跌家数）→ 同花顺（兜底，含成交额/净流入/涨跌家数）→ 腾讯行情（末级兜底）
-- 概念：akshare-东财（主源）→ 腾讯行情（兜底，同花顺无概念行情列表）
+- 行业：akshare-东财（主源，含换手率/涨跌家数）→ 腾讯板块排行（兜底，含换手率/成交额/净流入/涨跌家数）→ 同花顺（末级兜底，无换手率）
+- 概念：akshare-东财（主源）→ 腾讯板块排行（兜底，同花顺无概念行情列表）
 - 东财 push2 接口对高频请求有 IP 级封禁，异常/限流时自动降级
-- 板块资金流仅东财与同花顺（行业）提供，腾讯兜底时 net_inflow 为空
+- 腾讯板块排行（getRank）字段完整但分类体系为申万行业（hy2=申万二级）/腾讯概念，
+  与东财板块代码体系不同，跨源快照不可混用对比
 """
 import asyncio
 import io
@@ -19,7 +20,7 @@ from modules.stock.services._common import num, normalize_code
 
 logger = logging.getLogger(__name__)
 
-_QQ_RANK_URL = "https://proxy.finance.qq.com/ifzqgtimg/appstock/app/mktHs/rank"
+_QQ_GETRANK_URL = "https://proxy.finance.qq.com/cgi/cgi-bin/rank/pt/getRank"
 _QQ_HEADERS = {
     "User-Agent": (
         "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
@@ -50,13 +51,14 @@ async def fetch_board_list(board_type: str) -> list[dict]:
     try:
         return await _fetch_board_list_em(board_type)
     except Exception as e:
-        logger.warning("东财板块列表抓取失败(%s)，尝试降级: %s", board_type, e)
+        logger.warning("东财板块列表抓取失败(%s)，降级腾讯板块排行: %s", board_type, e)
+    try:
+        return await _fetch_board_list_qq(board_type)
+    except Exception as e:
+        logger.warning("腾讯板块排行抓取失败(%s)，尝试降级: %s", board_type, e)
     if board_type == "industry":
-        try:
-            return await _fetch_board_list_ths()
-        except Exception as e:
-            logger.warning("同花顺行业板块抓取失败，降级腾讯行情: %s", e)
-    return await _fetch_board_list_qq(board_type)
+        return await _fetch_board_list_ths()
+    raise RuntimeError(f"板块列表数据源全部不可用({board_type})")
 
 
 async def _fetch_board_list_em(board_type: str) -> list[dict]:
@@ -181,51 +183,71 @@ async def _fetch_board_list_ths() -> list[dict]:
 
 
 async def _fetch_board_list_qq(board_type: str) -> list[dict]:
-    """腾讯行情兜底：板块涨跌排行（行业 t=01 / 概念 t=02）
+    """腾讯板块排行兜底：getRank 接口（行业 hy2=申万二级 / 概念 gn）
 
-    提供涨跌幅与领涨股；无成交额/换手率/涨跌家数字段（置 None）
+    字段比 mktHs 行情排行完整：换手率(hsl)/成交额(turnover)/成交量(volume)/
+    主力净流入(zljlr)/涨跌家数(zgb "涨/跌")/领涨股(lzg)。
+    金额单位为万元，入库前换算为元；成交量单位为手。
     """
-    rank_type = "01" if board_type == "industry" else "02"
+    qq_board_type = "hy2" if board_type == "industry" else "gn"
 
     items: list[dict] = []
     async with httpx.AsyncClient(timeout=15, headers=_QQ_HEADERS) as client:
-        page = 1
+        offset = 0
+        page_size = 100
         while True:
             resp = await client.get(
-                _QQ_RANK_URL,
-                params={"l": 100, "p": page, "t": f"{rank_type}/averatio", "o": 0},
+                _QQ_GETRANK_URL,
+                params={
+                    "board_type": qq_board_type,
+                    "sort_type": "turnover",
+                    "direct": "down",
+                    "offset": offset,
+                    "count": page_size,
+                },
             )
             resp.raise_for_status()
             payload = resp.json()
-            if payload.get("code") != 0:
-                raise RuntimeError(f"腾讯板块接口返回错误: {payload.get('msg')}")
-            rows = payload.get("data") or []
+            data = payload.get("data") or {}
+            if payload.get("code") != 0 or not isinstance(data, dict):
+                raise RuntimeError(f"腾讯板块排行返回错误: {payload.get('msg')}")
+            rows = data.get("rank_list") or []
             for row in rows:
-                board_code = str(row.get("bd_code", "")).strip()
-                board_name = str(row.get("bd_name", "")).strip()
+                board_code = str(row.get("code", "")).strip()
+                board_name = str(row.get("name", "")).strip()
                 if not board_code or not board_name:
                     continue
+                turnover = num(row.get("turnover"))
+                net_inflow = num(row.get("zljlr"))
+                rising_count, falling_count = None, None
+                breadth = str(row.get("zgb") or "")
+                if "/" in breadth:
+                    up, down = breadth.split("/", 1)
+                    rising_count, falling_count = num(up), num(down)
+                leading = row.get("lzg") or {}
                 items.append({
                     "board_type": board_type,
                     "board_code": board_code,
                     "board_name": board_name,
-                    "change_pct": num(row.get("bd_zdf")),
-                    "turnover": None,
-                    "turnover_rate": None,
-                    "volume": None,
-                    "rising_count": None,
-                    "falling_count": None,
-                    "leading_stock_code": normalize_code(row.get("nzg_code")) or None,
-                    "leading_stock_name": str(row.get("nzg_name", "")).strip() or None,
-                    "leading_stock_change_pct": num(row.get("nzg_zdf")),
+                    "change_pct": num(row.get("zdf")),
+                    "turnover": turnover * 1e4 if turnover is not None else None,
+                    "turnover_rate": num(row.get("hsl")),
+                    "volume": num(row.get("volume")),
+                    "net_inflow": net_inflow * 1e4 if net_inflow is not None else None,
+                    "rising_count": int(rising_count) if rising_count is not None else None,
+                    "falling_count": int(falling_count) if falling_count is not None else None,
+                    "leading_stock_code": normalize_code(leading.get("code")) or None,
+                    "leading_stock_name": str(leading.get("name", "")).strip() or None,
+                    "leading_stock_change_pct": num(leading.get("zdf")),
                 })
-            if len(rows) < 100:
+            offset += len(rows)
+            total = num(data.get("total")) or 0
+            if not rows or offset >= total:
                 break
-            page += 1
             await asyncio.sleep(0.5)
 
     if not items:
-        raise RuntimeError(f"腾讯板块列表为空({board_type})")
+        raise RuntimeError(f"腾讯板块排行为空({board_type})")
     return items
 
 

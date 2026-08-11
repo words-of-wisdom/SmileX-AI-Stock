@@ -19,6 +19,14 @@
 - **换手率缺口**：同花顺行业列表/详情页均无板块级换手率（详情页"换手(%)"是成分股列），腾讯亦无；东财被限流期间换手率仍为 null 显示 `-`，东财恢复后自动有值
 - 已实测：今日行业 90 条 turnover/net_inflow 全量有值，与同花顺官网详情页数值逐一吻合；接口 `/admin/stock/board/list` 200 返回完整字段
 
+## 后续补充（同日第三轮：板块换手率 + 涨停原因）
+
+用户反馈「行业板块换手率没有加载、热门个股涨停原因没有显示」。排查：两轮后行业落同花顺链（无换手率字段）、概念落腾讯 mktHs 链（无换手率），东财 push2 持续拒连；涨停原因在 `limit_up_fetcher.py` 中硬编码 None（东财涨停池无此字段）。处置：
+
+- **改** `board_fetcher.py`：腾讯兜底由 mktHs 行情排行换成 getRank 板块排行（`proxy.finance.qq.com/cgi/cgi-bin/rank/pt/getRank`，行业 hy2=申万二级 124 个 / 概念 gn 798 个），含换手率(hsl)/成交额(turnover, 万元)/成交量(volume, 手)/主力净流入(zljlr, 万元)/涨跌家数(zgb "涨/跌")/领涨股(lzg)；降级链调整为 行业=东财→腾讯 getRank→同花顺、概念=东财→腾讯 getRank，东财限流期间全字段有值。金额需 ×1e4 换算为元
+- **改** `limit_up_fetcher.py`：新增 `fetch_limit_up_reasons`，从同花顺涨停池接口（`data.10jqka.com.cn/dataapi/limit_up/limit_up_pool`，需 Referer 头，无需 v cookie）按股票代码补齐 limit_up_reason；best-effort，失败置空不阻塞主流程；filter=HS,GEM2STAR 不覆盖北交所、同花顺未归类的个股原因仍为空
+- 已实测：今日行业 124 条 / 概念 798 条换手率、成交额、净流入、涨跌家数全量有值；涨停股 61 只中 58 只原因已补齐
+
 ## 涉及范围
 
 ### 后端
