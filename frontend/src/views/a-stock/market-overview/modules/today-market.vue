@@ -3,6 +3,7 @@ import dayjs from 'dayjs';
 import { computed, onMounted, ref } from 'vue';
 import { NButton, NCard, NDatePicker, NGrid, NGridItem, NSpace, NStatistic, NText } from 'naive-ui';
 import { fetchGetMarketDates, fetchGetMarketIndices, fetchSyncMarket } from '@/service/api';
+import { useAutoRefresh } from '@/hooks/common/auto-refresh';
 import { $t } from '@/locales';
 
 const UP = '#f5222d';
@@ -44,15 +45,15 @@ const totalTurnover = computed(() => {
   return sum;
 });
 
-async function loadData() {
-  loading.value = true;
+async function loadData(silent = false) {
+  if (!silent) loading.value = true;
   try {
     const { data, error } = await fetchGetMarketIndices(
       selectedDate.value ? dayjs(selectedDate.value).format('YYYY-MM-DD') : null
     );
     if (!error) indices.value = data || [];
   } finally {
-    loading.value = false;
+    if (!silent) loading.value = false;
   }
 }
 
@@ -67,20 +68,24 @@ async function syncData() {
     const { error } = await fetchSyncMarket();
     if (!error) {
       window.$message?.success($t('page.aStock.marketOverview.syncSuccess'));
-      await Promise.all([loadData(), loadDates()]);
+      await refresh();
     }
   } finally {
     syncing.value = false;
   }
 }
 
+/** 最后刷新时间 + 定时自动刷新（退出页面自动停止计时器） */
+const { lastRefreshTime, refresh } = useAutoRefresh(async (silent: boolean) => {
+  await Promise.all([loadData(silent), loadDates()]);
+});
+
 function onDateChange() {
   loadData();
 }
 
 onMounted(() => {
-  loadData();
-  loadDates();
+  refresh();
 });
 </script>
 
@@ -93,6 +98,10 @@ onMounted(() => {
           <NStatistic :label="$t('page.aStock.marketOverview.indexCount')" :value="indices.length" />
         </NSpace>
         <NSpace align="center" :size="12">
+          <NText depth="3" class="flex-y-center gap-4px text-12px whitespace-nowrap">
+            <icon-mdi-clock-outline class="text-14px" />
+            {{ $t('page.aStock.marketOverview.lastRefresh') }} {{ lastRefreshTime ? lastRefreshTime.format('HH:mm:ss') : '-' }}
+          </NText>
           <NDatePicker
             v-model:value="selectedDate"
             type="date"
@@ -107,7 +116,7 @@ onMounted(() => {
             <template #icon><icon-mdi-cloud-download-outline class="text-icon" /></template>
             {{ $t('page.aStock.marketOverview.sync') }}
           </NButton>
-          <NButton size="small" :loading="loading" @click="loadData">
+          <NButton size="small" :loading="loading" @click="() => refresh()">
             <template #icon><icon-ic-round-refresh class="text-icon" /></template>
             {{ $t('common.refresh') }}
           </NButton>

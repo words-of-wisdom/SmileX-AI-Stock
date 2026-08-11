@@ -4,6 +4,7 @@ import { computed, onMounted, ref } from 'vue';
 import { NButton, NCard, NDataTable, NDatePicker, NRadioButton, NRadioGroup, NSpace, NTag, NText } from 'naive-ui';
 import type { DataTableColumns } from 'naive-ui';
 import { fetchGetBoardDates, fetchGetBoardList, fetchSyncBoard } from '@/service/api';
+import { useAutoRefresh } from '@/hooks/common/auto-refresh';
 import { $t } from '@/locales';
 
 defineOptions({
@@ -45,8 +46,8 @@ function renderPct(val: number | null) {
   return <span style={{ color: pctColor(val), fontWeight: '500' }}>{fmtPct(val)}</span>;
 }
 
-async function loadData() {
-  loading.value = true;
+async function loadData(silent = false) {
+  if (!silent) loading.value = true;
   try {
     const { data: rows, error } = await fetchGetBoardList({
       board_type: boardType.value,
@@ -56,7 +57,7 @@ async function loadData() {
     });
     if (!error) data.value = rows || [];
   } finally {
-    loading.value = false;
+    if (!silent) loading.value = false;
   }
 }
 
@@ -71,12 +72,17 @@ async function syncData() {
     const { error } = await fetchSyncBoard(boardType.value);
     if (!error) {
       window.$message?.success($t('page.aStock.industryBoard.syncSuccess'));
-      await Promise.all([loadData(), loadDates()]);
+      await refresh();
     }
   } finally {
     syncing.value = false;
   }
 }
+
+/** 最后刷新时间 + 定时自动刷新（退出页面自动停止计时器） */
+const { lastRefreshTime, refresh } = useAutoRefresh(async (silent: boolean) => {
+  await Promise.all([loadData(silent), loadDates()]);
+});
 
 function onBoardTypeChange() {
   selectedDate.value = null;
@@ -162,8 +168,7 @@ const columns = computed<DataTableColumns<Api.StockBoard.BoardDailyItem>>(() => 
 ]);
 
 onMounted(() => {
-  loadData();
-  loadDates();
+  refresh();
 });
 </script>
 
@@ -186,6 +191,10 @@ onMounted(() => {
           </NRadioGroup>
         </NSpace>
         <NSpace align="center" :size="12">
+          <NText depth="3" class="flex-y-center gap-4px text-12px whitespace-nowrap">
+            <icon-mdi-clock-outline class="text-14px" />
+            {{ $t('page.aStock.industryBoard.lastRefresh') }} {{ lastRefreshTime ? lastRefreshTime.format('HH:mm:ss') : '-' }}
+          </NText>
           <NDatePicker
             v-model:value="selectedDate"
             type="date"
@@ -200,7 +209,7 @@ onMounted(() => {
             <template #icon><icon-mdi-cloud-download-outline class="text-icon" /></template>
             {{ $t('page.aStock.industryBoard.sync') }}
           </NButton>
-          <NButton size="small" :loading="loading" @click="loadData">
+          <NButton size="small" :loading="loading" @click="() => refresh()">
             <template #icon><icon-ic-round-refresh class="text-icon" /></template>
             {{ $t('common.refresh') }}
           </NButton>
