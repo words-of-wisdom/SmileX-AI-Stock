@@ -148,9 +148,7 @@ function renderChangePct(val: number | null) {
 
 /** 热度值格式化 */
 function formatHot(v: number): string {
-  if (v >= 100000000) return `${(v / 100000000).toFixed(1)}亿`;
-  if (v >= 10000) return `${(v / 10000).toFixed(1)}万`;
-  return v.toFixed(0);
+  return v.toLocaleString();
 }
 
 /** 前三名排名徽章配色 */
@@ -203,7 +201,7 @@ const columns = computed<DataTableColumns<Api.StockHot.StockHotRankItem>>(() => 
   {
     key: 'stock_name',
     title: $t('page.aStock.stockHot.stockName'),
-    minWidth: 160,
+    width: 200,
     render: row => (
       <div class="flex items-center gap-8px">
         <NButton
@@ -244,7 +242,7 @@ const columns = computed<DataTableColumns<Api.StockHot.StockHotRankItem>>(() => 
   {
     key: 'hot_value',
     title: $t('page.aStock.stockHot.hotValue'),
-    width: 140,
+    minWidth: 140,
     align: 'right',
     render: row => {
       if (row.hot_value === null || row.hot_value === undefined) return <NText depth={3}>-</NText>;

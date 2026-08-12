@@ -1384,6 +1384,7 @@ declare namespace App {
             open: string;
             prevClose: string;
             closePrice: string;
+            changePct: string;
             miniTrend: string;
             trend: string;
             netInflow: string;

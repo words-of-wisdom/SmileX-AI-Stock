@@ -1256,6 +1256,7 @@ const local: App.I18n.Schema = {
         open: 'Open',
         prevClose: 'Prev Close',
         closePrice: 'Close',
+        changePct: 'Change %',
         miniTrend: 'Recent Trend',
         trend: 'Trend',
         netInflow: 'Net Inflow',

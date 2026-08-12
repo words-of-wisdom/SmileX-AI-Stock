@@ -10,6 +10,7 @@
 
 详细索引见 [business/README.md](./business/README.md)。近期：
 
+- [2026-08-12 股票热榜开盘时段每 5 分钟同步](./business/2026-08-12_stock_hot_5min_sync.md) — 热榜抓取 cron 改 `*/5 9-15 * * mon-fri` + 任务内交易时段守卫（9:30-11:30、13:00-15:00）；顺带修 APScheduler 星期坑（数字 `1-5`=周二至周六漏周一），三个收盘行情任务改 `mon-fri`
 - [2026-08-11 A股行情同步兜底扩展](./business/2026-08-11_astock_sync_fallback_extend.md) — 东财 push2 对本机 IP 拒连致大盘/板块/热榜为空：板块加腾讯行情兜底、东财人气榜改 emappdata+新浪批量行情、指数降级链插入新浪实时层且不满 7 指数视为失败、板块入库按 board_code 同批去重；行业链后补同花顺层（含成交额/净流入，换手率仅东财有）、同日重同步先删后插防多源混杂
 - [2026-08-11 A股大盘指数多源降级（akshare+Baostock+新浪）](./business/2026-08-11_astock_multi_source_fallback.md) — 大盘指数抓取三级降级链（东财→baostock→sina），历史查询不足自动回补入库；baostock 不覆盖科创50由 sina 补齐，板块/涨停池仍仅东财源
 - [2026-08-10 AI 助手目录 + LLM 配置菜单调整](./business/2026-08-10_ai_assistant_menu.md) — 将「AI 配置」一级目录改名为「AI 助手」，子菜单「AI 模型配置」改名为「LLM 配置」；运行库 alembic 停在 0004 致 AI 菜单不可见，直接修复 sys_menu 数据 + 调整前端 i18n 文案；路由名 ai/ai_model 不变

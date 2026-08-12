@@ -1249,6 +1249,7 @@ const local: App.I18n.Schema = {
         open: '今开',
         prevClose: '昨收',
         closePrice: '收盘价',
+        changePct: '涨跌幅',
         miniTrend: '近期走势',
         trend: '走势图',
         netInflow: '主力净流入',

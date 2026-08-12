@@ -1,9 +1,24 @@
 <script setup lang="tsx">
-import dayjs from 'dayjs';
 import { computed, onMounted, ref } from 'vue';
-import { NButton, NCard, NDataTable, NDatePicker, NGrid, NGridItem, NPagination, NRadioButton, NRadioGroup, NSpace, NStatistic, NTag, NText } from 'naive-ui';
+import {
+  NButton,
+  NCard,
+  NDataTable,
+  NDatePicker,
+  NGrid,
+  NGridItem,
+  NPagination,
+  NRadioButton,
+  NRadioGroup,
+  NSpace,
+  NStatistic,
+  NTag,
+  NText
+} from 'naive-ui';
 import type { DataTableColumns } from 'naive-ui';
+import dayjs from 'dayjs';
 import { fetchGetLimitUpDates, fetchGetLimitUpList, fetchGetLimitUpStats, fetchSyncLimitUp } from '@/service/api';
+import { useAppStore } from '@/store/modules/app';
 import { useAutoRefresh } from '@/hooks/common/auto-refresh';
 import { $t } from '@/locales';
 import { isStockAutoRefreshTime } from '../utils';
@@ -11,6 +26,8 @@ import { isStockAutoRefreshTime } from '../utils';
 defineOptions({
   name: 'LimitUp'
 });
+
+const appStore = useAppStore();
 
 const UP = '#f5222d';
 const DOWN = '#52c41a';
@@ -71,11 +88,9 @@ function renderConsecutive(val: number | null) {
   if (!val || val <= 1) return <NText depth={3}>-</NText>;
   const color = val >= 4 ? '#cf1322' : val >= 2 ? '#fa541c' : '#fa8c16';
   return (
-    <span
-      class="inline-flex-center"
-      style={{ color, fontWeight: '700', fontSize: '13px' }}
-    >
-      {val}{'\u8fde'}
+    <span class="inline-flex-center" style={{ color, fontWeight: '700', fontSize: '13px' }}>
+      {val}
+      {'\u8FDE'}
     </span>
   );
 }
@@ -124,9 +139,12 @@ async function syncData() {
 }
 
 /** 最后刷新时间 + 定时自动刷新（退出页面自动停止计时器） */
-const { lastRefreshTime, refresh } = useAutoRefresh(async (silent: boolean) => {
-  await Promise.all([loadData(silent), loadStats(), loadDates()]);
-}, { shouldRefresh: isStockAutoRefreshTime });
+const { lastRefreshTime, refresh } = useAutoRefresh(
+  async (silent: boolean) => {
+    await Promise.all([loadData(silent), loadStats(), loadDates()]);
+  },
+  { shouldRefresh: isStockAutoRefreshTime }
+);
 
 function onFilterChange() {
   page.value = 1;
@@ -144,9 +162,7 @@ const columns = computed<DataTableColumns<Api.StockLimitUp.LimitUpStockItem>>(()
     key: 'stock_code',
     title: $t('page.aStock.limitUp.stockCode'),
     width: 100,
-    render: row => (
-      <span style={{ fontFamily: 'monospace', fontSize: '12px' }}>{row.stock_code}</span>
-    )
+    render: row => <span style={{ fontFamily: 'monospace', fontSize: '12px' }}>{row.stock_code}</span>
   },
   {
     key: 'stock_name',
@@ -171,9 +187,7 @@ const columns = computed<DataTableColumns<Api.StockLimitUp.LimitUpStockItem>>(()
     width: 90,
     align: 'right',
     render: row => (
-      <span style={{ color: pctColor(row.change_pct), fontWeight: '500' }}>
-        {fmtNum(row.latest_price)}
-      </span>
+      <span style={{ color: pctColor(row.change_pct), fontWeight: '500' }}>{fmtNum(row.latest_price)}</span>
     )
   },
   {
@@ -278,7 +292,7 @@ onMounted(() => {
     </NCard>
 
     <NCard :bordered="false" size="small" class="card-wrapper">
-      <div class="flex-y-center justify-between flex-wrap gap-12px">
+      <div class="flex-y-center flex-wrap justify-between gap-12px">
         <NRadioGroup v-model:value="marketBoard" size="small" @update:value="onFilterChange">
           <NRadioButton value="all">{{ $t('page.aStock.limitUp.all') }}</NRadioButton>
           <NRadioButton value="main">{{ $t('page.aStock.limitUp.main') }}</NRadioButton>
@@ -286,14 +300,14 @@ onMounted(() => {
           <NRadioButton value="star">{{ $t('page.aStock.limitUp.star') }}</NRadioButton>
         </NRadioGroup>
         <NSpace align="center" :size="12">
-          <NText depth="3" class="flex-y-center gap-4px text-12px whitespace-nowrap">
+          <NText depth="3" class="flex-y-center gap-4px whitespace-nowrap text-12px">
             <icon-mdi-clock-outline class="text-14px" />
             {{ $t('page.aStock.limitUp.lastRefresh') }} {{ lastRefreshTime ? lastRefreshTime.format('HH:mm:ss') : '-' }}
           </NText>
           <NDatePicker
             v-model:value="selectedDate"
             type="date"
-                        :placeholder="$t('page.aStock.limitUp.datePlaceholder')"
+            :placeholder="$t('page.aStock.limitUp.datePlaceholder')"
             :is-date-disabled="(ts: number) => !availableDates.includes(dayjs(ts).format('YYYY-MM-DD'))"
             clearable
             size="small"
@@ -313,21 +327,20 @@ onMounted(() => {
     </NCard>
 
     <NCard :bordered="false" size="small" class="card-wrapper sm:flex-1-hidden">
-      <NDataTable
-        :columns="columns"
-        :data="data"
-        size="small"
-        :loading="loading"
-        :scroll-x="1400"
-        :row-key="(row: Api.StockLimitUp.LimitUpStockItem) => row.id"
-      />
-      <div class="mt-12px flex justify-end">
-        <NPagination
-          :page="page"
-          :page-size="pageSize"
-          :item-count="total"
-          @update:page="onPageChange"
+      <div class="h-full flex-col-stretch gap-12px">
+        <NDataTable
+          :columns="columns"
+          :data="data"
+          size="small"
+          :loading="loading"
+          :flex-height="!appStore.isMobile"
+          :scroll-x="1400"
+          :row-key="(row: Api.StockLimitUp.LimitUpStockItem) => row.id"
+          class="sm:flex-1-hidden"
         />
+        <div class="flex justify-end">
+          <NPagination :page="page" :page-size="pageSize" :item-count="total" @update:page="onPageChange" />
+        </div>
       </div>
     </NCard>
   </div>
