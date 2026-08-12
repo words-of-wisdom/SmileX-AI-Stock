@@ -14,6 +14,7 @@
 
 - `modules/scheduler/tasks/stock_hot_sync.py`：cron `0 * * * *` → `*/5 9-15 * * mon-fri`，任务内新增 `_in_trading_hours` 守卫（周一至周五 09:30-11:30、13:00-15:00 连续竞价时段，非时段直接跳过返回 `{"skipped": True}`）
 - `modules/scheduler/tasks/stock_market_sync.py`：三个收盘任务 cron 星期字段 `1-5` → `mon-fri`（顺带修 bug）
+- `main.py`：lifespan 启动顺序调整，先 `seed_scheduler`（新注册任务入库）再 `sync_jobs_from_db`（加载 job 到调度器）；原顺序下新任务首次入库的启动只写 DB 不进调度器，要等下一次重启才按 cron 触发
 
 ### 前端
 
@@ -26,12 +27,14 @@
 - 法定节假日休市判断未做（需要交易日历数据源），节假日会照常触发抓取，源站返回的多为前一交易日数据，靠 `(record_date, source, stock_code)` 联合唯一约束去重，影响可控
 - 同日多次抓取仍只保留当日首次快照（on_conflict_do_nothing），盘中排名/价格变动不会覆盖既有行，只会补进新上榜个股；如需盘中快照明细需另建历史表
 - 装饰器 cron 变更经 `sync_registry_to_db` 在启动时同步入库，重启后生效
+- `misfire_grace_time=60`：若应用恰好不在 15:30 前后一分钟内运行，当日收盘快照会被跳过且无补偿；缺口由历史查询的自动回补（行数 < min(days,20) 时从数据源补历史）兜底
 
 ## 相关文件
 
 - `backend/modules/scheduler/tasks/stock_hot_sync.py`
 - `backend/modules/scheduler/tasks/stock_market_sync.py`
 - `backend/modules/stock/services/stock_hot_service.py`（抓取入库逻辑，未改）
+- `backend/main.py`（lifespan 种子/同步顺序）
 
 ## 记录日期
 

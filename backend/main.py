@@ -69,10 +69,9 @@ async def lifespan(app: FastAPI):
     manager = SchedulerManager.get_instance()
     manager.start()
     app.state.scheduler_manager = manager
-    async for db_sync in get_session():
-        await manager.sync_jobs_from_db(db_sync)
-    logger.info("定时任务同步完成")
     # 种子数据：菜单 + 同步装饰器注册的任务（非致命：缺失只影响菜单可见性）
+    # 必须先 seed 再从 DB 同步 job：否则新注册的任务在首次入库的这次启动中
+    # 只写 DB、不进调度器，要等到下一次重启才会真正按 cron 触发
     try:
         from modules.scheduler.seed import seed_scheduler
         async for db_seed in get_session():
@@ -80,6 +79,9 @@ async def lifespan(app: FastAPI):
     except Exception as exc:
         # 降级为 WARNING：不影响核心功能，ERROR 会污染 5xx 错误率统计
         logger.warning("定时任务种子数据加载失败，部分预置任务可能缺失: %s", exc)
+    async for db_sync in get_session():
+        await manager.sync_jobs_from_db(db_sync)
+    logger.info("定时任务同步完成")
     yield
     # 停止定时任务调度器
     try:

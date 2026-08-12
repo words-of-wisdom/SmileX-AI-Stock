@@ -39,7 +39,7 @@
 ## 约束与备注
 
 - 当前活动日志仍保留在日志根目录（如 `/var/log/smilex_cloud/access.log`），滚动后的历史日志进入日期目录。
-- `backupCount` 保持 90 天（prod）/ 14 天（dev），由 `TimedRotatingFileHandler` 自动清理最旧的日期目录。
+- ~~`backupCount` 保持 90 天（prod）/ 14 天（dev），由 `TimedRotatingFileHandler` 自动清理最旧的日期目录。~~（**此结论有误**：父类只识别后缀文件，认不出日期子目录；且 `when='D'` 实为「启动时刻+24h」滚动而非按自然日切分。已于 2026-08-12 修正为 `when='MIDNIGHT'` 并由 `DailyDirFileHandler` 自行清理日期目录，见 [2026-08-12 调试模式日志按天划分](./2026-08-12_log_rollover_midnight_fix.md)。）
 - Gunicorn 多 worker 同时滚动时仍可能存在竞态，与原有 `TimedRotatingFileHandler` 行为一致；如后续高并发场景出现问题，可再评估 `concurrent-log-handler` 或系统级 `logrotate`。
 - 修改后需要重新执行 `deploy/deploy.sh setup`（或 `systemctl daemon-reload && systemctl restart smilex-cloud`）使服务生效。
 
