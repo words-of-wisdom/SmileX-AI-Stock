@@ -12,6 +12,12 @@ from .stock_market import (
     BusinessLimitUpStock,
 )
 
+from .block_trade import (
+    BusinessBlockTradeDaily,
+    BusinessBlockTradeActive,
+    BusinessBlockTradeSyncLog,
+)
+
 __all__ = [
     "AppUser",
     "BusinessNews",
@@ -21,4 +27,7 @@ __all__ = [
     "BusinessMarketIndexDaily",
     "BusinessBoardDaily",
     "BusinessLimitUpStock",
+    "BusinessBlockTradeDaily",
+    "BusinessBlockTradeActive",
+    "BusinessBlockTradeSyncLog",
 ]

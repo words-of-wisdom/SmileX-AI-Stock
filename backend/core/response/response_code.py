@@ -128,6 +128,13 @@ class CustomErrorCode(CustomCodeBase):
     STOCK_NO_DATA = (11102, "stock.no_data")
     STOCK_INDEX_NOT_FOUND = (11103, "stock.index_not_found")
     STOCK_BOARD_NOT_FOUND = (11104, "stock.board_not_found")
+    # AI Agent 11301-11400
+    AGENT_NO_AVAILABLE_MODEL = (11301, "error.agent.no_available_model")
+    AGENT_MODEL_KEY_ERROR = (11302, "error.agent.model_key_error")
+    AGENT_LLM_REQUEST_FAILED = (11303, "error.agent.llm_request_failed")
+    AGENT_TOOL_NOT_FOUND = (11304, "error.agent.tool_not_found")
+    AGENT_TOOL_EXECUTION_ERROR = (11305, "error.agent.tool_execution_error")
+    AGENT_MAX_ITERATIONS = (11306, "error.agent.max_iterations")
 
 @dataclass
 class CustomResponse:

@@ -49,6 +49,15 @@ export const generatedRoutes: GeneratedRoute[] = [
     },
     children: [
       {
+        name: 'a-stock_block-trade',
+        path: '/a-stock/block-trade',
+        component: 'view.a-stock_block-trade',
+        meta: {
+          title: 'a-stock_block-trade',
+          i18nKey: 'route.a-stock_block-trade'
+        }
+      },
+      {
         name: 'a-stock_industry-board',
         path: '/a-stock/industry-board',
         component: 'view.a-stock_industry-board',
@@ -107,6 +116,15 @@ export const generatedRoutes: GeneratedRoute[] = [
       i18nKey: 'route.ai'
     },
     children: [
+      {
+        name: 'ai_chat',
+        path: '/ai/chat',
+        component: 'view.ai_chat',
+        meta: {
+          title: 'ai_chat',
+          i18nKey: 'route.ai_chat'
+        }
+      },
       {
         name: 'ai_model',
         path: '/ai/model',

@@ -21,12 +21,14 @@ declare module "@elegant-router/types" {
     "404": "/404";
     "500": "/500";
     "a-stock": "/a-stock";
+    "a-stock_block-trade": "/a-stock/block-trade";
     "a-stock_industry-board": "/a-stock/industry-board";
     "a-stock_limit-up": "/a-stock/limit-up";
     "a-stock_market-overview": "/a-stock/market-overview";
     "a-stock_stock-hot": "/a-stock/stock-hot";
     "about": "/about";
     "ai": "/ai";
+    "ai_chat": "/ai/chat";
     "ai_model": "/ai/model";
     "business": "/business";
     "business_app-user": "/business/app-user";
@@ -131,11 +133,13 @@ declare module "@elegant-router/types" {
     | "500"
     | "iframe-page"
     | "login"
+    | "a-stock_block-trade"
     | "a-stock_industry-board"
     | "a-stock_limit-up"
     | "a-stock_market-overview"
     | "a-stock_stock-hot"
     | "about"
+    | "ai_chat"
     | "ai_model"
     | "business_app-user"
     | "demo_dict"
