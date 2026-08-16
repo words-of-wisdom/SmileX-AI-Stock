@@ -17,6 +17,7 @@ import logging
 import httpx
 
 from modules.stock.services._common import num, normalize_code
+from modules.stock.services.market_fetcher import FUND_FLOW_RETRY_DELAY
 
 logger = logging.getLogger(__name__)
 
@@ -252,20 +253,32 @@ async def _fetch_board_list_qq(board_type: str) -> list[dict]:
 
 
 async def fetch_board_fund_flow(board_type: str) -> dict[str, float | None]:
-    """抓取板块资金流排行，返回 {board_name: net_inflow} 映射"""
+    """抓取板块资金流排行，返回 {board_name: net_inflow} 映射
+
+    东财单源无兜底，被限流时退避重试一次，仍失败返回空映射（净流入留空）
+    """
     import akshare as ak
 
     indicator = "今日"
     sector_type = "行业资金流" if board_type == "industry" else "概念资金流"
 
-    try:
-        df = await asyncio.to_thread(
-            ak.stock_sector_fund_flow_rank,
-            indicator=indicator,
-            sector_type=sector_type,
-        )
-    except Exception as exc:
-        logger.warning("板块资金流抓取失败(%s): %s", sector_type, exc)
+    df = None
+    last_exc: Exception | None = None
+    for attempt in range(2):
+        try:
+            df = await asyncio.to_thread(
+                ak.stock_sector_fund_flow_rank,
+                indicator=indicator,
+                sector_type=sector_type,
+            )
+            break
+        except Exception as exc:  # noqa: BLE001
+            last_exc = exc
+            if attempt == 0:
+                logger.warning("板块资金流抓取失败(%s)，%ds 后重试一次", sector_type, FUND_FLOW_RETRY_DELAY)
+                await asyncio.sleep(FUND_FLOW_RETRY_DELAY)
+    if df is None:
+        logger.warning("板块资金流抓取最终失败(%s): %s", sector_type, last_exc)
         return {}
 
     result = {}

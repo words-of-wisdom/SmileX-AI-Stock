@@ -32,6 +32,25 @@ from modules.stock.services.block_trade_fetcher import (
 
 logger = logging.getLogger(__name__)
 
+# asyncpg 单语句绑定参数上限 32767；行数 × 列数超过后整个 upsert 失败
+# （近六月窗口 1800+ 行 × 18 列曾触发），按行数分块写入
+UPSERT_CHUNK_SIZE = 800
+
+
+async def _chunked_upsert(db: AsyncSession, model, rows: list[dict], conflict_cols: list[str], update_cols: list[str]) -> int:
+    """分块执行 upsert，返回累计写入行数（与单条语句的 rowcount 语义一致）"""
+    saved = 0
+    for start in range(0, len(rows), UPSERT_CHUNK_SIZE):
+        chunk = rows[start:start + UPSERT_CHUNK_SIZE]
+        stmt = insert(model).values(chunk)
+        stmt = stmt.on_conflict_do_update(
+            index_elements=conflict_cols,
+            set_={col: getattr(stmt.excluded, col) for col in update_cols},
+        )
+        result = await db.execute(stmt)
+        saved += result.rowcount or 0
+    return saved
+
 
 class BlockTradeService:
     """大宗交易（暗盘）服务类"""
@@ -81,24 +100,24 @@ class BlockTradeService:
                     }
                     for it in raw_items
                 ]
-                stmt = insert(BusinessBlockTradeDaily).values(rows)
-                stmt = stmt.on_conflict_do_update(
-                    index_elements=["record_date", "stock_code"],
-                    set_={
-                        "stock_name": stmt.excluded.stock_name,
-                        "change_pct": stmt.excluded.change_pct,
-                        "close_price": stmt.excluded.close_price,
-                        "trade_price": stmt.excluded.trade_price,
-                        "premium_rate": stmt.excluded.premium_rate,
-                        "trade_count": stmt.excluded.trade_count,
-                        "trade_volume": stmt.excluded.trade_volume,
-                        "trade_amount": stmt.excluded.trade_amount,
-                        "amount_ratio": stmt.excluded.amount_ratio,
-                        "updated_at": stmt.excluded.updated_at,
-                    },
+                saved_count = await _chunked_upsert(
+                    db,
+                    BusinessBlockTradeDaily,
+                    rows,
+                    ["record_date", "stock_code"],
+                    [
+                        "stock_name",
+                        "change_pct",
+                        "close_price",
+                        "trade_price",
+                        "premium_rate",
+                        "trade_count",
+                        "trade_volume",
+                        "trade_amount",
+                        "amount_ratio",
+                        "updated_at",
+                    ],
                 )
-                result = await db.execute(stmt)
-                saved_count = result.rowcount or 0
 
             db.add(BusinessBlockTradeSyncLog(
                 sub_board="daily",
@@ -174,29 +193,29 @@ class BlockTradeService:
                     }
                     for it in raw_items
                 ]
-                stmt = insert(BusinessBlockTradeActive).values(rows)
-                stmt = stmt.on_conflict_do_update(
-                    index_elements=["stat_window", "stock_code"],
-                    set_={
-                        "stock_name": stmt.excluded.stock_name,
-                        "latest_price": stmt.excluded.latest_price,
-                        "change_pct": stmt.excluded.change_pct,
-                        "last_list_date": stmt.excluded.last_list_date,
-                        "list_count_total": stmt.excluded.list_count_total,
-                        "list_count_premium": stmt.excluded.list_count_premium,
-                        "list_count_discount": stmt.excluded.list_count_discount,
-                        "total_amount": stmt.excluded.total_amount,
-                        "premium_rate": stmt.excluded.premium_rate,
-                        "amount_ratio": stmt.excluded.amount_ratio,
-                        "avg_change_1d": stmt.excluded.avg_change_1d,
-                        "avg_change_5d": stmt.excluded.avg_change_5d,
-                        "avg_change_10d": stmt.excluded.avg_change_10d,
-                        "avg_change_20d": stmt.excluded.avg_change_20d,
-                        "updated_at": stmt.excluded.updated_at,
-                    },
+                saved_count = await _chunked_upsert(
+                    db,
+                    BusinessBlockTradeActive,
+                    rows,
+                    ["stat_window", "stock_code"],
+                    [
+                        "stock_name",
+                        "latest_price",
+                        "change_pct",
+                        "last_list_date",
+                        "list_count_total",
+                        "list_count_premium",
+                        "list_count_discount",
+                        "total_amount",
+                        "premium_rate",
+                        "amount_ratio",
+                        "avg_change_1d",
+                        "avg_change_5d",
+                        "avg_change_10d",
+                        "avg_change_20d",
+                        "updated_at",
+                    ],
                 )
-                result = await db.execute(stmt)
-                saved_count = result.rowcount or 0
 
             db.add(BusinessBlockTradeSyncLog(
                 sub_board="active",

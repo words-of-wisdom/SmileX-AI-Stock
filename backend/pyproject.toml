@@ -37,6 +37,8 @@ dependencies = [
     "greenlet>=3.3.0",
     "akshare>=1.18.83",
     "baostock>=0.8.8",
+    # 东财 push2 系接口按 TLS 指纹过滤 Python httpx/requests，curl_cffi 模拟浏览器指纹保底
+    "curl_cffi>=0.16.0",
 ]
 
 [tool.uv.workspace]

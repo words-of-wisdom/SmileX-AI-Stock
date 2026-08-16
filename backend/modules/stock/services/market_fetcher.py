@@ -12,11 +12,16 @@ import asyncio
 import logging
 from datetime import date, timedelta
 
+import httpx
+
 from modules.stock.services._baostock import fetch_index_daily_bars
 from modules.stock.services._common import num
 from modules.stock.services._sina import fetch_spot_quotes
 
 logger = logging.getLogger(__name__)
+
+# 东财资金流（无兜底源）被限流时的退避重试间隔（秒）
+FUND_FLOW_RETRY_DELAY = 20
 
 # 需要追踪的主要指数（东财代码格式）
 TRACKED_INDICES = [
@@ -170,19 +175,123 @@ async def _fetch_index_spot_baostock() -> list[dict]:
 
 
 async def fetch_market_fund_flow() -> list[dict]:
-    """抓取大盘（沪深两市）资金流历史（东财，约最近 100 个交易日）
+    """抓取大盘（沪深两市）资金流历史（东财，约最近 120 个交易日）
 
     返回标准化 dict 列表（按日期升序），字段：
         record_date / main_net_inflow / super_large_net_inflow /
         large_net_inflow / medium_net_inflow / small_net_inflow（单位均为元）
 
-    说明：东财大盘资金流走 push2his 家族接口，东财限流/封禁期间会抛异常，
-    该数据暂无可用兜底源，由调用方捕获后跳过（页面显示 "-"），待东财恢复自动补齐
+    说明：东财 push2his 会按 TLS 客户端指纹过滤——curl/浏览器正常，
+    Python httpx/requests 指纹会被断连（RemoteDisconnected），且过滤
+    时开时关。降级链：httpx 直连 → curl_cffi(chrome 指纹) 直连 →
+    akshare（接口结构变化时的语义兜底）；全部失败由调用方捕获后跳过
+    （页面显示 "-"），待东财恢复自动补齐
     """
+    try:
+        return await _fetch_market_fund_flow_httpx()
+    except Exception as e:
+        logger.warning("东财大盘资金流 httpx 直连失败，降级 curl_cffi: %s", e)
+    try:
+        return await _fetch_market_fund_flow_curl_cffi()
+    except Exception as e:
+        logger.warning("东财大盘资金流 curl_cffi 抓取失败，降级 akshare: %s", e)
+    return await _fetch_market_fund_flow_akshare()
+
+
+_FUND_FLOW_URL = "https://push2his.eastmoney.com/api/qt/stock/fflow/daykline/get"
+_FUND_FLOW_PARAMS = {
+    "lmt": 0,
+    "klt": 101,
+    "fields1": "f1,f2,f3,f7",
+    "fields2": "f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61,f62,f63,f64,f65",
+    # 沪深两市合计：上证指数 + 深证成指
+    "secid": "1.000001",
+    "secid2": "0.399001",
+}
+
+
+def _parse_fund_flow_klines(resp_data: dict) -> list[dict]:
+    """解析东财 fflow daykline 接口的 klines
+
+    每行：日期,主力,小单,中单,大单,超大单净流入额,各净流入占比,收盘价,涨跌幅...
+    """
+    items = []
+    for line in resp_data.get("klines") or []:
+        parts = str(line).split(",")
+        if len(parts) < 6 or not parts[0]:
+            continue
+        items.append({
+            "record_date": parts[0],
+            "main_net_inflow": num(parts[1]),
+            "small_net_inflow": num(parts[2]),
+            "medium_net_inflow": num(parts[3]),
+            "large_net_inflow": num(parts[4]),
+            "super_large_net_inflow": num(parts[5]),
+        })
+    if not items:
+        raise RuntimeError("东财大盘资金流直连返回为空")
+    return items
+
+
+async def _fetch_market_fund_flow_httpx() -> list[dict]:
+    """httpx+浏览器UA 直连东财资金流日线接口（东财指纹过滤关闭时可用）"""
+    last_exc: Exception | None = None
+    async with httpx.AsyncClient(
+        headers={
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+            ),
+            "Accept": "application/json, text/plain, */*",
+        },
+        timeout=15,
+    ) as client:
+        for attempt in range(2):
+            try:
+                resp = await client.get(_FUND_FLOW_URL, params=_FUND_FLOW_PARAMS)
+                resp.raise_for_status()
+                return _parse_fund_flow_klines(resp.json().get("data") or {})
+            except RuntimeError:
+                raise
+            except Exception as exc:  # noqa: BLE001
+                last_exc = exc
+                if attempt == 0:
+                    await asyncio.sleep(3)
+    raise last_exc or RuntimeError("东财大盘资金流 httpx 直连失败")
+
+
+async def _fetch_market_fund_flow_curl_cffi() -> list[dict]:
+    """curl_cffi(chrome TLS 指纹) 直连东财资金流接口
+
+    东财按 TLS 指纹过滤时 httpx/requests 均被断连，curl/浏览器指纹正常，
+    此为保底通道
+    """
+    from curl_cffi.requests import AsyncSession
+
+    async with AsyncSession(impersonate="chrome", timeout=15) as client:
+        resp = await client.get(_FUND_FLOW_URL, params=_FUND_FLOW_PARAMS)
+        resp.raise_for_status()
+        return _parse_fund_flow_klines((resp.json() or {}).get("data") or {})
+
+
+async def _fetch_market_fund_flow_akshare() -> list[dict]:
+    """akshare 兜底路径（东财按客户端特征拦截 python-requests 时不可用）"""
     import akshare as ak
 
-    df = await asyncio.to_thread(ak.stock_market_fund_flow)
-    if df is None or df.empty:
+    df = None
+    last_exc: Exception | None = None
+    for attempt in range(2):
+        try:
+            df = await asyncio.to_thread(ak.stock_market_fund_flow)
+            break
+        except Exception as exc:  # noqa: BLE001
+            last_exc = exc
+            if attempt == 0:
+                logger.warning("akshare 大盘资金流抓取失败，%.0fs 后重试一次: %s", FUND_FLOW_RETRY_DELAY, exc)
+                await asyncio.sleep(FUND_FLOW_RETRY_DELAY)
+    if df is None:
+        raise last_exc  # type: ignore[misc]
+    if df.empty:
         raise RuntimeError("东财大盘资金流返回为空")
 
     items = []
