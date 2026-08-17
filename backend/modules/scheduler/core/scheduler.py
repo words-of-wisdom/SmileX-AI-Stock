@@ -120,6 +120,24 @@ class SchedulerManager:
 
         await _execute_task(task, func, db, triggered_by=triggered_by)
 
+    def trigger_task_in_background(self, task_id: int) -> bool:
+        """把任务投递到调度器后台立即执行（fire-and-forget），不阻塞调用方。
+
+        手动触发接口用它而非 run_task_now：HTTP 请求立即返回，
+        任务在后台用独立 session 执行，不受请求生命周期影响。
+        """
+        if not self.running:
+            logger.warning("调度器未运行，无法后台触发任务 task_id=%s", task_id)
+            return False
+        self._scheduler.add_job(
+            _manual_job_wrapper,
+            trigger=DateTrigger(run_date=datetime.now(timezone.utc)),
+            args=[task_id],
+            id=f"manual-{task_id}-{int(datetime.now().timestamp() * 1000)}",
+            name=f"manual:{task_id}",
+        )
+        return True
+
     @staticmethod
     def preview_cron(cron_expression: str, count: int = 5) -> list[str]:
         """预览 cron 表达式接下来 N 次执行时间"""
@@ -181,6 +199,36 @@ class SchedulerManager:
         except Exception:
             pass
         return None
+
+
+async def _manual_job_wrapper(task_id: int):
+    """手动触发任务的后台执行入口：独立 session，不受请求生命周期影响"""
+    from database.manager.async_manager import get_session
+
+    async for db in get_session():
+        try:
+            stmt = select(SysScheduledTask).where(
+                SysScheduledTask.id == task_id,
+                SysScheduledTask.deleted_at.is_(None),
+            )
+            result = await db.execute(stmt)
+            task = result.scalar_one_or_none()
+            if task is None:
+                logger.error("手动触发失败：任务 task_id=%s 不存在", task_id)
+                return
+
+            definition = get_task_definition(task.task_key) or (
+                get_task_definition_by_path(task.function_path) if task.function_path else None
+            )
+            func = definition.function if definition else _load_function(task.function_path)
+            if func is None:
+                logger.error("任务 %s 的函数无法加载", task.task_key)
+                return
+
+            await _execute_task(task, func, db, triggered_by="manual")
+        except Exception as exc:
+            logger.error("手动触发任务执行异常 task_id=%s: %s", task_id, exc)
+            await db.rollback()
 
 
 async def _scheduled_job_wrapper(task_id: int):

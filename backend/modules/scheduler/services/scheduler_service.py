@@ -165,10 +165,12 @@ class SchedulerService:
 
     @staticmethod
     async def manual_trigger(db: AsyncSession, task_id: int):
-        """手动触发任务"""
+        """手动触发任务（投递到调度器后台执行，接口立即返回不等待任务完成）"""
         task = await SchedulerService.get_task(db, task_id)
         manager = SchedulerManager.get_instance()
-        await manager.run_task_now(task, db, triggered_by="manual")
+        triggered = manager.trigger_task_in_background(task.id)
+        if not triggered:
+            raise ConflictError(msg="调度器未运行，无法触发任务")
         return task
 
     @staticmethod
