@@ -135,6 +135,14 @@ class CustomErrorCode(CustomCodeBase):
     AGENT_TOOL_NOT_FOUND = (11304, "error.agent.tool_not_found")
     AGENT_TOOL_EXECUTION_ERROR = (11305, "error.agent.tool_execution_error")
     AGENT_MAX_ITERATIONS = (11306, "error.agent.max_iterations")
+    # AI 分析策略 11501-11600
+    STRATEGY_NOT_FOUND = (11501, "error.strategy.not_found")
+    STRATEGY_NAME_EXIST = (11502, "error.strategy.name_exist")
+    STRATEGY_DISABLED = (11503, "error.strategy.disabled")
+    STRATEGY_EXECUTE_FAILED = (11504, "error.strategy.execute_failed")
+    STRATEGY_SIGNAL_PARSE_FAILED = (11505, "error.strategy.signal_parse_failed")
+    POSITION_NOT_FOUND = (11506, "error.strategy.position_not_found")
+    POSITION_ALREADY_CLOSED = (11507, "error.strategy.position_already_closed")
 
 @dataclass
 class CustomResponse:

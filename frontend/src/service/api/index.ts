@@ -13,5 +13,6 @@ export * from './stock-market';
 export * from './stock-board';
 export * from './stock-limit-up';
 export * from './block-trade';
+export * from './strategy';
 export * from './agent-chat';
 export * from './demo';

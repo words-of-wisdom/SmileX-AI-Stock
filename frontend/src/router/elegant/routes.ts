@@ -117,6 +117,15 @@ export const generatedRoutes: GeneratedRoute[] = [
     },
     children: [
       {
+        name: 'ai_analysis',
+        path: '/ai/analysis',
+        component: 'view.ai_analysis',
+        meta: {
+          title: 'ai_analysis',
+          i18nKey: 'route.ai_analysis'
+        }
+      },
+      {
         name: 'ai_chat',
         path: '/ai/chat',
         component: 'view.ai_chat',

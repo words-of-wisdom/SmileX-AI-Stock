@@ -52,6 +52,12 @@ from database.models.business.stock_market import (
     BusinessBoardDaily,
     BusinessLimitUpStock,
 )
+from database.models.business.strategy import (
+    BusinessAiStrategy,
+    BusinessStrategyRun,
+    BusinessStrategyPosition,
+    BusinessPositionTrackLog,
+)
 from database.models.sys.scheduled_task import SysScheduledTask
 from database.models.sys.task_log import SysScheduledTaskLog
 

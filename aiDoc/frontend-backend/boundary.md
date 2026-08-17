@@ -307,3 +307,13 @@ METHOD \n PATH \n timestamp \n nonce \n app_id \n sha256(body).hexdigest()
 - [ ] 时间字段格式正确（`YYYY-MM-DD HH:mm:ss`）
 - [ ] Swagger 注释与实现一致
 - [ ] 分页参数和返回格式符合 `ResponsePageModel` 规范
+---
+
+## AI 分析策略模块契约（2026-08-16）
+
+- 前缀 `/admin/strategy`；权限码：`strategy:manage`（策略 CRUD）、`strategy:run`（手动执行）、`strategy:position:list`（持仓/统计/跟踪日志/手动触发跟踪）、`strategy:position:close`（手动平仓）
+- 策略 CRUD：`GET/POST /strategies`、`PUT/DELETE /strategies/{id}`，分页查询走统一分页结构；`execute_periods` 为 JSON 数组（`pre_market/morning/noon/tail/post_close`），`stock_pool` 为 `{codes: string[]}`（空则 AI 全市场自选）
+- 执行：`POST /strategies/{id}/run`（同步执行，返回 `{run_id, status, signals[], opened_count, closed_count, error_msg}`）；执行记录 `GET /strategies/{id}/runs`（`parsed_signals` 为信号 JSON 数组）
+- 持仓：`GET /positions`（`strategy_id/status/stock_code` 过滤 + 分页，`status`: holding/closed/cancelled）、`POST /positions/track`（手动触发跟踪）、`POST /positions/{id}/close`（手动平仓，body `{price?, reason?}`）、`GET /positions/{id}/tracks`、`GET /positions/stats`
+- 金额/比例均为 `number`（后端 Numeric → float），百分比数值不带 `%`；时间字段带时区 datetime
+- 前端 API：`src/service/api/strategy.ts`，类型 `Api.Strategy.*`（`src/typings/api/strategy.d.ts`）
