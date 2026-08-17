@@ -51,6 +51,7 @@ from database.models.business.stock_market import (
     BusinessMarketIndexDaily,
     BusinessBoardDaily,
     BusinessLimitUpStock,
+    BusinessIndexConstituent,
 )
 from database.models.business.strategy import (
     BusinessAiStrategy,

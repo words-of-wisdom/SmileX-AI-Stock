@@ -3,6 +3,9 @@ declare namespace Api {
     /** 执行时段 */
     export type ExecutePeriod = 'pre_market' | 'morning' | 'noon' | 'tail' | 'post_close';
 
+    /** 策略分类 */
+    export type StrategyCategory = 'pre_market_auction' | 'noon' | 'tail' | 'blue_chip' | 'general';
+
     /** 持仓状态 */
     export type PositionStatus = 'holding' | 'closed' | 'cancelled';
 
@@ -11,6 +14,8 @@ declare namespace Api {
       id: number;
       name: string;
       description: string | null;
+      category: StrategyCategory | string;
+      is_preset: boolean;
       prompt_template: string | null;
       stock_pool: { codes?: string[] } | null;
       execute_periods: ExecutePeriod[] | null;
@@ -27,6 +32,7 @@ declare namespace Api {
     export interface StrategySaveParams {
       name: string;
       description?: string | null;
+      category?: StrategyCategory | string;
       prompt_template?: string | null;
       stock_pool?: { codes: string[] } | null;
       execute_periods: ExecutePeriod[];

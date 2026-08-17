@@ -1532,6 +1532,13 @@ declare namespace App {
         trackDone: string;
         lastTrack: string;
         searchName: string;
+        searchCategory: string;
+        categoryAuction: string;
+        categoryNoon: string;
+        categoryTail: string;
+        categoryBlueChip: string;
+        categoryGeneral: string;
+        presetTag: string;
         searchCode: string;
         holdingCount: string;
         closedCount: string;
@@ -1560,6 +1567,7 @@ declare namespace App {
           namePlaceholder: string;
           nameRequired: string;
           description: string;
+          category: string;
           prompt: string;
           promptPlaceholder: string;
           stockPool: string;

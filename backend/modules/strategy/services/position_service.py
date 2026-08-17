@@ -7,7 +7,7 @@
 import logging
 from typing import Optional
 
-from sqlalchemy import select, func
+from sqlalchemy import select, func, case
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.exception.errors import CustomError
@@ -123,7 +123,7 @@ class PositionService:
             .where(*conditions)
             .order_by(
                 # holding 排前，其余按卖出时间/建仓时间倒序
-                func.case((BusinessStrategyPosition.status == "holding", 0), else_=1),
+                case((BusinessStrategyPosition.status == "holding", 0), else_=1),
                 BusinessStrategyPosition.buy_time.desc(),
             )
             .offset((page - 1) * page_size)
@@ -165,12 +165,12 @@ class PositionService:
         pos = result.scalar_one_or_none()
         if not pos:
             raise CustomError(
-                err_code=CustomErrorCode.POSITION_NOT_FOUND,
+                error=CustomErrorCode.POSITION_NOT_FOUND,
                 msg=f"持仓 [{position_id}] 不存在",
             )
         if pos.status != "holding":
             raise CustomError(
-                err_code=CustomErrorCode.POSITION_ALREADY_CLOSED,
+                error=CustomErrorCode.POSITION_ALREADY_CLOSED,
                 msg=f"持仓 [{pos.stock_name}] 已平仓",
             )
 

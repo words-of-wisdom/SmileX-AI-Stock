@@ -309,11 +309,13 @@ METHOD \n PATH \n timestamp \n nonce \n app_id \n sha256(body).hexdigest()
 - [ ] 分页参数和返回格式符合 `ResponsePageModel` 规范
 ---
 
-## AI 分析策略模块契约（2026-08-16）
+## AI 分析策略模块契约（2026-08-16，2026-08-17 更新）
 
 - 前缀 `/admin/strategy`；权限码：`strategy:manage`（策略 CRUD）、`strategy:run`（手动执行）、`strategy:position:list`（持仓/统计/跟踪日志/手动触发跟踪）、`strategy:position:close`（手动平仓）
 - 策略 CRUD：`GET/POST /strategies`、`PUT/DELETE /strategies/{id}`，分页查询走统一分页结构；`execute_periods` 为 JSON 数组（`pre_market/morning/noon/tail/post_close`），`stock_pool` 为 `{codes: string[]}`（空则 AI 全市场自选）
-- 执行：`POST /strategies/{id}/run`（同步执行，返回 `{run_id, status, signals[], opened_count, closed_count, error_msg}`）；执行记录 `GET /strategies/{id}/runs`（`parsed_signals` 为信号 JSON 数组）
+- 2026-08-17 新增策略分类：`category` 字符串（`pre_market_auction/noon/tail/blue_chip/general`，自建默认 `general`）+ `is_preset` bool（系统预置标记）；列表接口新增 `category` 过滤参数；迁移 0016 预置 10 条策略（默认停用，允许编辑/删除），蓝筹白马两类带固定股票池
+- 执行：`POST /strategies/{id}/run`（同步执行，返回 `{run_id, status, signals[], opened_count, closed_count, error_msg}`）；执行记录 `GET /strategies/{id}/runs`（`parsed_signals` 为信号 JSON 数组）；执行 user prompt 注入策略 `stop_loss_pct/take_profit_pct` 风控比例
 - 持仓：`GET /positions`（`strategy_id/status/stock_code` 过滤 + 分页，`status`: holding/closed/cancelled）、`POST /positions/track`（手动触发跟踪）、`POST /positions/{id}/close`（手动平仓，body `{price?, reason?}`）、`GET /positions/{id}/tracks`、`GET /positions/stats`
+- Agent 工具新增（策略/对话共用）：`get_index_history`（指数日 K 线）、`get_index_constituents`（沪深300/中证500 成分股，数据来自 BaoStock 同步任务 `stock.constituent_sync`，每交易日 17:10）
 - 金额/比例均为 `number`（后端 Numeric → float），百分比数值不带 `%`；时间字段带时区 datetime
-- 前端 API：`src/service/api/strategy.ts`，类型 `Api.Strategy.*`（`src/typings/api/strategy.d.ts`）
+- 前端 API：`src/service/api/strategy.ts`，类型 `Api.Strategy.*`（`src/typings/api/strategy.d.ts`，含 `StrategyCategory`）

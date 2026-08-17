@@ -10,6 +10,7 @@ from .stock_market import (
     BusinessMarketIndexDaily,
     BusinessBoardDaily,
     BusinessLimitUpStock,
+    BusinessIndexConstituent,
 )
 
 from .block_trade import (
@@ -27,6 +28,7 @@ __all__ = [
     "BusinessMarketIndexDaily",
     "BusinessBoardDaily",
     "BusinessLimitUpStock",
+    "BusinessIndexConstituent",
     "BusinessBlockTradeDaily",
     "BusinessBlockTradeActive",
     "BusinessBlockTradeSyncLog",

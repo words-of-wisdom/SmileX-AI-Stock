@@ -15,6 +15,7 @@ from modules.stock.services.stock_hot_service import StockHotService
 from modules.stock.services.market_service import MarketService
 from modules.stock.services.board_service import BoardService
 from modules.stock.services.limit_up_service import LimitUpService
+from modules.stock.services.constituent_service import ConstituentService
 
 logger = logging.getLogger(__name__)
 
@@ -222,6 +223,100 @@ async def get_board_ranking(
                 else None,
             }
             for b in boards[:limit]
+        ],
+    }
+
+
+@register_tool(
+    name="get_index_history",
+    description="获取大盘指数的历史日K线数据（最近N天），包含每日收盘点位、涨跌幅、成交量、成交额、最高、最低等。用于判断指数的中期趋势（如上证指数、沪深300是否处于上升通道）。数据不足时会自动从数据源回补。",
+    parameters={
+        "type": "object",
+        "properties": {
+            "index_code": {
+                "type": "string",
+                "description": "指数代码：000001-上证指数、399001-深证成指、399006-创业板指、000688-科创50、000300-沪深300、000905-中证500、000852-中证1000。默认 000001",
+                "default": "000001",
+            },
+            "days": {
+                "type": "integer",
+                "description": "查看最近几天的日K线，默认 30 天",
+                "default": 30,
+            },
+        },
+    },
+)
+async def get_index_history(
+    db: AsyncSession, index_code: str = "000001", days: int = 30
+) -> dict[str, Any]:
+    """获取指数历史日K线。"""
+    days = max(1, min(days, 250))
+    bars = await MarketService.get_history(db, index_code, days=days)
+    if not bars:
+        return {"items": [], "message": f"指数 {index_code} 暂无历史数据"}
+
+    return {
+        "index_code": index_code,
+        "days": len(bars),
+        "items": [
+            {
+                "record_date": str(b.record_date),
+                "latest_price": b.latest_price,
+                "change_pct": b.change_pct,
+                "volume": b.volume,
+                "turnover": b.turnover,
+                "high": b.high,
+                "low": b.low,
+                "open": b.open,
+                "prev_close": b.prev_close,
+            }
+            for b in bars
+        ],
+    }
+
+
+@register_tool(
+    name="get_index_constituents",
+    description="获取指数成分股列表（当前支持沪深300、中证500），包含成分股代码、名称、权重（如有）。用于蓝筹白马/核心资产类选股时获取结构化的成分股候选池。",
+    parameters={
+        "type": "object",
+        "properties": {
+            "index_code": {
+                "type": "string",
+                "enum": ["000300", "000905"],
+                "description": "指数代码：000300-沪深300，000905-中证500。默认 000300",
+                "default": "000300",
+            },
+            "limit": {
+                "type": "integer",
+                "description": "返回条目数，默认 50（沪深300/中证500各约300/500只）",
+                "default": 50,
+            },
+        },
+    },
+)
+async def get_index_constituents(
+    db: AsyncSession, index_code: str = "000300", limit: int = 50
+) -> dict[str, Any]:
+    """获取指数成分股列表。"""
+    items = await ConstituentService.get_list(db, index_code=index_code, limit=limit)
+    if not items:
+        return {
+            "items": [],
+            "message": f"指数 {index_code} 暂无成分股数据，请等待成分股同步任务执行（每交易日 17:10）",
+        }
+
+    return {
+        "index_code": index_code,
+        "index_name": items[0].index_name,
+        "record_date": str(items[0].record_date),
+        "items": [
+            {
+                "stock_code": it.stock_code,
+                "stock_name": it.stock_name,
+                "weight": float(it.weight) if it.weight else None,
+            }
+            for it in items
         ],
     }
 

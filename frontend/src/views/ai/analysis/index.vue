@@ -9,6 +9,7 @@ import {
   NInput,
   NPagination,
   NPopconfirm,
+  NSelect,
   NSpace,
   NStatistic,
   NTabPane,
@@ -41,20 +42,36 @@ const activeTab = ref<'strategies' | 'positions' | 'stats'>('strategies');
 // ================================================================
 // 策略管理
 // ================================================================
-const strategySearch = reactive({ name: '' });
+const strategySearch = reactive({ name: '', category: null as string | null });
 const strategyList = ref<Api.Strategy.StrategyItem[]>([]);
 const strategyTotal = ref(0);
 const strategyPage = reactive({ page: 1, pageSize: 20 });
 const strategyLoading = ref(false);
 
-const drawerVisible = ref(false);
-const editingStrategy = ref<Api.Strategy.StrategyItem | null>(null);
+const CATEGORY_LABEL: Record<string, string> = {
+  pre_market_auction: $t('page.aiStrategy.categoryAuction'),
+  noon: $t('page.aiStrategy.categoryNoon'),
+  tail: $t('page.aiStrategy.categoryTail'),
+  blue_chip: $t('page.aiStrategy.categoryBlueChip'),
+  general: $t('page.aiStrategy.categoryGeneral')
+};
+
+const CATEGORY_TAG_TYPE: Record<string, 'warning' | 'info' | 'success' | 'primary' | 'default'> = {
+  pre_market_auction: 'warning',
+  noon: 'info',
+  tail: 'success',
+  blue_chip: 'primary',
+  general: 'default'
+};
+
+const CATEGORY_OPTIONS = Object.entries(CATEGORY_LABEL).map(([value, label]) => ({ value, label }));
 
 async function loadStrategies(silent = false) {
   if (!silent) strategyLoading.value = true;
   try {
     const { data, error } = await fetchGetStrategyList({
       name: strategySearch.name || undefined,
+      category: strategySearch.category || undefined,
       page: strategyPage.page,
       page_size: strategyPage.pageSize
     });
@@ -66,6 +83,9 @@ async function loadStrategies(silent = false) {
     if (!silent) strategyLoading.value = false;
   }
 }
+
+const drawerVisible = ref(false);
+const editingStrategy = ref<Api.Strategy.StrategyItem | null>(null);
 
 function searchStrategies() {
   strategyPage.page = 1;
@@ -154,8 +174,31 @@ const strategyColumns = computed<DataTableColumns<Api.Strategy.StrategyItem>>(()
   {
     key: 'name',
     title: $t('page.aiStrategy.form.name'),
-    width: 140,
-    render: row => <span class="font-500">{row.name}</span>
+    width: 150,
+    render: row => (
+      <div class="flex items-center gap-4px">
+        <span class="font-500">{row.name}</span>
+        {row.is_preset ? (
+          <NTag size="tiny" bordered={false} type="primary">
+            {$t('page.aiStrategy.presetTag')}
+          </NTag>
+        ) : null}
+      </div>
+    )
+  },
+  {
+    key: 'category',
+    title: $t('page.aiStrategy.form.category'),
+    width: 100,
+    render: row => (
+      <NTag
+        size="small"
+        bordered={false}
+        type={CATEGORY_TAG_TYPE[row.category] ?? 'default'}
+      >
+        {CATEGORY_LABEL[row.category] ?? row.category}
+      </NTag>
+    )
   },
   {
     key: 'execute_periods',
@@ -663,6 +706,15 @@ onMounted(() => {
             class="w-160px"
             @keyup.enter="searchStrategies"
           />
+          <NSelect
+            v-model:value="strategySearch.category"
+            size="small"
+            clearable
+            :placeholder="$t('page.aiStrategy.searchCategory')"
+            :options="CATEGORY_OPTIONS"
+            class="w-130px"
+            @update:value="searchStrategies"
+          />
           <NButton size="small" type="primary" @click="openCreate">
             <template #icon><icon-mdi-plus class="text-icon" /></template>
             {{ $t('page.aiStrategy.createStrategy') }}
@@ -728,7 +780,7 @@ onMounted(() => {
           :data="strategyList"
           size="small"
           :loading="strategyLoading"
-          :scroll-x="1100"
+          :scroll-x="1200"
           :row-key="(row: Api.Strategy.StrategyItem) => row.id"
         />
         <div class="mt-12px flex justify-end">

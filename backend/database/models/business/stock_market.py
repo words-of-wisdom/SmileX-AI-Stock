@@ -7,6 +7,7 @@ A股行情快照表
 - 大盘资金流日快照
 - 行业/概念板块日快照
 - 涨停股池日快照
+- 指数成分股快照（BaoStock）
 """
 
 from datetime import date
@@ -218,4 +219,33 @@ class BusinessLimitUpStock(Base):
     )
     limit_up_reason: Mapped[Optional[str]] = mapped_column(
         String(500), nullable=True, comment="涨停原因", default=None
+    )
+
+
+class BusinessIndexConstituent(Base):
+    """指数成分股快照表（BaoStock 拉取，当前覆盖沪深300/中证500）"""
+
+    __table_args__ = (
+        UniqueConstraint(
+            "record_date",
+            "index_code",
+            "stock_code",
+            name="uk_index_constituent_date_code",
+        ),
+        {"comment": "指数成分股快照表"},
+    )
+
+    record_date: Mapped[date] = mapped_column(
+        Date, nullable=False, index=True, comment="快照日期（本地时区）"
+    )
+    index_code: Mapped[str] = mapped_column(
+        String(20), nullable=False, index=True, comment="指数代码，如 000300-沪深300"
+    )
+    index_name: Mapped[str] = mapped_column(String(50), nullable=False, comment="指数名称")
+    stock_code: Mapped[str] = mapped_column(
+        String(20), nullable=False, index=True, comment="成分股代码（6位）"
+    )
+    stock_name: Mapped[str] = mapped_column(String(50), nullable=False, comment="成分股名称")
+    weight: Mapped[Optional[float]] = mapped_column(
+        Numeric(10, 4), nullable=True, comment="权重(%)", default=None
     )

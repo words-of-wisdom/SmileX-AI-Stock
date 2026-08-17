@@ -47,12 +47,13 @@ def _page_data(records, page, page_size, total):
 async def get_strategy_list(
     name: str | None = Query(None, description="策略名称模糊查询"),
     status: bool | None = Query(None, description="状态过滤"),
+    category: str | None = Query(None, description="策略分类过滤：pre_market_auction/noon/tail/blue_chip/general"),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     user=Depends(current_user),
     db: AsyncSession = Depends(get_session),
 ):
-    items, total = await StrategyService.get_list(db, name, status, page, page_size)
+    items, total = await StrategyService.get_list(db, name, status, category, page, page_size)
     return response_base.success(data=_page_data(items, page, page_size, total))
 
 

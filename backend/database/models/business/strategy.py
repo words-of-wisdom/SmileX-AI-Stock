@@ -14,7 +14,7 @@ AI 分析策略表
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import String, Integer, Numeric, Boolean, Text, DateTime, JSON, Index
+from sqlalchemy import String, Integer, BigInteger, Numeric, Boolean, Text, DateTime, JSON, Index
 from sqlalchemy.orm import mapped_column, Mapped
 
 from database.models.base import Base
@@ -31,6 +31,13 @@ class BusinessAiStrategy(Base):
     name: Mapped[str] = mapped_column(String(100), nullable=False, comment="策略名称")
     description: Mapped[Optional[str]] = mapped_column(
         String(500), nullable=True, default=None, comment="策略描述"
+    )
+    category: Mapped[str] = mapped_column(
+        String(30), nullable=False, default="general", index=True,
+        comment="策略分类：pre_market_auction/noon/tail/blue_chip/general",
+    )
+    is_preset: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, comment="是否系统预置策略"
     )
     prompt_template: Mapped[Optional[str]] = mapped_column(
         Text, nullable=True, default=None, comment="策略定制提示词（选股逻辑、风控要求等）"
@@ -69,7 +76,7 @@ class BusinessStrategyRun(Base):
     )
 
     strategy_id: Mapped[int] = mapped_column(
-        Integer, nullable=False, comment="策略 ID"
+        BigInteger, nullable=False, comment="策略 ID"
     )
     strategy_name: Mapped[str] = mapped_column(
         String(100), nullable=False, comment="策略名称（执行时快照）"
@@ -114,7 +121,7 @@ class BusinessStrategyPosition(Base):
     )
 
     strategy_id: Mapped[int] = mapped_column(
-        Integer, nullable=False, comment="策略 ID"
+        BigInteger, nullable=False, comment="策略 ID"
     )
     strategy_name: Mapped[str] = mapped_column(
         String(100), nullable=False, comment="策略名称（建仓时快照）"
@@ -181,7 +188,7 @@ class BusinessPositionTrackLog(Base):
     )
 
     position_id: Mapped[int] = mapped_column(
-        Integer, nullable=False, comment="持仓 ID"
+        BigInteger, nullable=False, comment="持仓 ID"
     )
     track_time: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, comment="跟踪时间"

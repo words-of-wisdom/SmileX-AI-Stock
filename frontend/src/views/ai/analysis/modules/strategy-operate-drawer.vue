@@ -10,6 +10,7 @@ import {
   NFormItem,
   NInput,
   NInputNumber,
+  NSelect,
   NSwitch,
   NText
 } from 'naive-ui';
@@ -44,6 +45,14 @@ const PERIOD_OPTIONS: Array<{ value: Api.Strategy.ExecutePeriod; label: string }
   { value: 'post_close', label: $t('page.aiStrategy.periodPostClose') }
 ];
 
+const CATEGORY_OPTIONS: Array<{ value: Api.Strategy.StrategyCategory; label: string }> = [
+  { value: 'pre_market_auction', label: $t('page.aiStrategy.categoryAuction') },
+  { value: 'noon', label: $t('page.aiStrategy.categoryNoon') },
+  { value: 'tail', label: $t('page.aiStrategy.categoryTail') },
+  { value: 'blue_chip', label: $t('page.aiStrategy.categoryBlueChip') },
+  { value: 'general', label: $t('page.aiStrategy.categoryGeneral') }
+];
+
 const isEdit = computed(() => props.editing !== null);
 const drawerTitle = computed(() =>
   isEdit.value ? $t('page.aiStrategy.editStrategy') : $t('page.aiStrategy.createStrategy')
@@ -54,6 +63,7 @@ const formRef = reactive<Partial<FormInst>>({});
 type Model = {
   name: string;
   description: string | null;
+  category: Api.Strategy.StrategyCategory | string;
   prompt_template: string | null;
   stockPoolCodes: string;
   execute_periods: Api.Strategy.ExecutePeriod[];
@@ -66,6 +76,7 @@ type Model = {
 const model = reactive<Model>({
   name: '',
   description: null,
+  category: 'general',
   prompt_template: null,
   stockPoolCodes: '',
   execute_periods: ['morning'],
@@ -99,6 +110,7 @@ watch(
     const e = props.editing;
     model.name = or(e?.name, '');
     model.description = or(e?.description, null);
+    model.category = or(e?.category, 'general');
     model.prompt_template = or(e?.prompt_template, null);
     model.stockPoolCodes = or(e?.stock_pool?.codes, []).join(', ');
     model.execute_periods = or(e?.execute_periods, ['morning']);
@@ -122,6 +134,7 @@ async function handleSubmit() {
   const data: Api.Strategy.StrategySaveParams = {
     name: model.name,
     description: model.description || null,
+    category: model.category || 'general',
     prompt_template: model.prompt_template || null,
     stock_pool: codes.length > 0 ? { codes } : null,
     execute_periods: model.execute_periods,
@@ -144,6 +157,9 @@ async function handleSubmit() {
         </NFormItem>
         <NFormItem :label="$t('page.aiStrategy.form.description')" path="description">
           <NInput v-model:value="model.description" type="textarea" :rows="2" />
+        </NFormItem>
+        <NFormItem :label="$t('page.aiStrategy.form.category')" path="category">
+          <NSelect v-model:value="model.category" :options="CATEGORY_OPTIONS" />
         </NFormItem>
         <NFormItem :label="$t('page.aiStrategy.form.prompt')" path="prompt_template">
           <NInput

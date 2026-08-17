@@ -108,3 +108,64 @@ async def fetch_index_daily_bars(
         {code: [bar, ...]}，bar 为标准化 dict，按日期升序
     """
     return await asyncio.to_thread(_query_index_daily, codes, start_date, end_date)
+
+
+# 成分股查询字段（沪深300 / 中证500 共用）
+_CONSTITUENT_FIELDS = "updateDate,code,code_name,weight"
+
+# 支持的成分股指数（baostock 仅提供沪深300与中证500两个成分接口）
+_CONSTITUENT_INDEXES = {
+    "000300": "沪深300",
+    "000905": "中证500",
+}
+
+
+def _query_constituents() -> list[dict]:
+    """（同步）登录 baostock 查询沪深300/中证500成分股列表"""
+    import baostock as bs
+
+    lg = bs.login()
+    if lg.error_code != "0":
+        raise RuntimeError(f"baostock 登录失败: {lg.error_msg}")
+
+    items: list[dict] = []
+    try:
+        for index_code, index_name in _CONSTITUENT_INDEXES.items():
+            query = (
+                bs.query_hs300_stocks() if index_code == "000300"
+                else bs.query_zz500_stocks()
+            )
+            if query.error_code != "0":
+                logger.warning(
+                    "baostock 查询 %s 成分股失败: %s", index_name, query.error_msg
+                )
+                continue
+            fields = _CONSTITUENT_FIELDS.split(",")
+            while query.next():
+                row = dict(zip(fields, query.get_row_data()))
+                # baostock 代码 sh.600000 -> 600000
+                stock_code = str(row.get("code") or "").split(".")[-1]
+                if len(stock_code) != 6:
+                    continue
+                items.append(
+                    {
+                        "record_date": row.get("updateDate") or None,
+                        "index_code": index_code,
+                        "index_name": index_name,
+                        "stock_code": stock_code,
+                        "stock_name": row.get("code_name") or "",
+                        "weight": num(row.get("weight")),
+                    }
+                )
+    finally:
+        bs.logout()
+    return items
+
+
+async def fetch_index_constituents() -> list[dict]:
+    """异步入口：查询沪深300/中证500成分股列表（蓝筹白马策略数据源）
+
+    Returns:
+        [{record_date, index_code, index_name, stock_code, stock_name, weight}, ...]
+    """
+    return await asyncio.to_thread(_query_constituents)

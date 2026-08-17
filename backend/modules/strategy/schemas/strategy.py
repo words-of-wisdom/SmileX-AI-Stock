@@ -21,12 +21,24 @@ EXECUTE_PERIOD_NAMES = {
     "manual": "手动执行",
 }
 
+# 策略分类常量（预置策略与用户自建共用，自建默认 general）
+STRATEGY_CATEGORIES = ("pre_market_auction", "noon", "tail", "blue_chip", "general")
+
+STRATEGY_CATEGORY_NAMES = {
+    "pre_market_auction": "早盘竞价",
+    "noon": "午盘",
+    "tail": "尾盘",
+    "blue_chip": "蓝筹白马",
+    "general": "综合",
+}
+
 
 class StrategyCreateRequest(BaseModel):
     """创建策略请求"""
 
     name: str = Field(..., min_length=1, max_length=100, description="策略名称")
     description: Optional[str] = Field(None, max_length=500, description="策略描述")
+    category: str = Field("general", max_length=30, description="策略分类")
     prompt_template: Optional[str] = Field(None, description="策略定制提示词")
     stock_pool: Optional[dict] = Field(None, description="股票池 {codes: [...]}")
     execute_periods: list[str] = Field(
@@ -52,6 +64,8 @@ class StrategyItem(BaseModel):
     id: int
     name: str
     description: Optional[str] = None
+    category: str = "general"
+    is_preset: bool = False
     prompt_template: Optional[str] = None
     stock_pool: Optional[dict] = None
     execute_periods: Optional[list] = None

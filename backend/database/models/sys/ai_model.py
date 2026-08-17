@@ -52,7 +52,10 @@ class SysAiModel(Base):
         String(100), nullable=False, index=True, comment="模型配置名称"
     )
     provider: Mapped[AiProviderEnum] = mapped_column(
-        Enum(AiProviderEnum), nullable=False, comment="AI 模型提供商"
+        # values_callable：按枚举 value（小写）序列化，与迁移 0008 建的 PG enum 成员一致；
+        # 默认按 name（大写）序列化会导致参数绑定报 invalid input value for enum
+        Enum(AiProviderEnum, values_callable=lambda obj: [e.value for e in obj]),
+        nullable=False, comment="AI 模型提供商",
     )
     base_url: Mapped[str] = mapped_column(
         String(500), nullable=False, comment="API 基础地址"
@@ -89,7 +92,9 @@ class SysAiModelBinding(Base):
     )
 
     function_code: Mapped[AiFunctionEnum] = mapped_column(
-        Enum(AiFunctionEnum), nullable=False, index=True, comment="功能场景编码"
+        # 同 provider：按枚举 value（小写）序列化，与 PG enum 成员一致
+        Enum(AiFunctionEnum, values_callable=lambda obj: [e.value for e in obj]),
+        nullable=False, index=True, comment="功能场景编码",
     )
     model_id: Mapped[int] = mapped_column(
         ForeignKey("sys_ai_model.id", ondelete="RESTRICT"),

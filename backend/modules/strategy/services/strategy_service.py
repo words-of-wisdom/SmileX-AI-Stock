@@ -14,6 +14,7 @@ from core.response.response_code import CustomErrorCode
 from database.models.business.strategy import BusinessAiStrategy
 from modules.strategy.schemas.strategy import (
     EXECUTE_PERIODS,
+    STRATEGY_CATEGORIES,
     StrategyCreateRequest,
     StrategyItem,
 )
@@ -25,8 +26,16 @@ def _validate_periods(periods: list[str]) -> None:
     invalid = [p for p in periods if p not in EXECUTE_PERIODS]
     if invalid:
         raise CustomError(
-            err_code=CustomErrorCode.STRATEGY_EXECUTE_FAILED,
+            error=CustomErrorCode.STRATEGY_EXECUTE_FAILED,
             msg=f"不支持的执行时段: {invalid}，可选值: {list(EXECUTE_PERIODS)}",
+        )
+
+
+def _validate_category(category: str) -> None:
+    if category not in STRATEGY_CATEGORIES:
+        raise CustomError(
+            error=CustomErrorCode.STRATEGY_EXECUTE_FAILED,
+            msg=f"不支持的策略分类: {category}，可选值: {list(STRATEGY_CATEGORIES)}",
         )
 
 
@@ -44,7 +53,7 @@ class StrategyService:
         strategy = result.scalar_one_or_none()
         if not strategy:
             raise CustomError(
-                err_code=CustomErrorCode.STRATEGY_NOT_FOUND,
+                error=CustomErrorCode.STRATEGY_NOT_FOUND,
                 msg=f"策略 [{strategy_id}] 不存在",
             )
         return strategy
@@ -54,6 +63,7 @@ class StrategyService:
         db: AsyncSession,
         name: str | None = None,
         status: bool | None = None,
+        category: str | None = None,
         page: int = 1,
         page_size: int = 20,
     ) -> tuple[list[StrategyItem], int]:
@@ -63,6 +73,8 @@ class StrategyService:
             conditions.append(BusinessAiStrategy.name.ilike(f"%{name}%"))
         if status is not None:
             conditions.append(BusinessAiStrategy.status == status)
+        if category:
+            conditions.append(BusinessAiStrategy.category == category)
 
         count_result = await db.execute(
             select(func.count()).select_from(BusinessAiStrategy).where(*conditions)
@@ -95,6 +107,7 @@ class StrategyService:
     @staticmethod
     async def create(db: AsyncSession, req: StrategyCreateRequest) -> StrategyItem:
         _validate_periods(req.execute_periods)
+        _validate_category(req.category)
 
         exist = await db.execute(
             select(BusinessAiStrategy.id).where(
@@ -104,13 +117,14 @@ class StrategyService:
         )
         if exist.scalar_one_or_none() is not None:
             raise CustomError(
-                err_code=CustomErrorCode.STRATEGY_NAME_EXIST,
+                error=CustomErrorCode.STRATEGY_NAME_EXIST,
                 msg=f"策略名称 [{req.name}] 已存在",
             )
 
         strategy = BusinessAiStrategy(
             name=req.name,
             description=req.description,
+            category=req.category,
             prompt_template=req.prompt_template,
             stock_pool=req.stock_pool,
             execute_periods=req.execute_periods,
@@ -129,6 +143,7 @@ class StrategyService:
         db: AsyncSession, strategy_id: int, req: StrategyCreateRequest
     ) -> StrategyItem:
         _validate_periods(req.execute_periods)
+        _validate_category(req.category)
         strategy = await StrategyService.get_by_id(db, strategy_id)
 
         # 名称查重（排除自身）
@@ -141,12 +156,13 @@ class StrategyService:
         )
         if exist.scalar_one_or_none() is not None:
             raise CustomError(
-                err_code=CustomErrorCode.STRATEGY_NAME_EXIST,
+                error=CustomErrorCode.STRATEGY_NAME_EXIST,
                 msg=f"策略名称 [{req.name}] 已存在",
             )
 
         strategy.name = req.name
         strategy.description = req.description
+        strategy.category = req.category
         strategy.prompt_template = req.prompt_template
         strategy.stock_pool = req.stock_pool
         strategy.execute_periods = req.execute_periods

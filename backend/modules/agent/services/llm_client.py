@@ -97,7 +97,7 @@ async def resolve_model(
 
     if not model:
         raise CustomError(
-            err_code=CustomErrorCode.AGENT_NO_AVAILABLE_MODEL,
+            error=CustomErrorCode.AGENT_NO_AVAILABLE_MODEL,
             msg=f"场景 [{function_code.value}] 未绑定模型且无可用默认模型",
         )
 
@@ -106,7 +106,7 @@ async def resolve_model(
     except Exception as e:
         logger.error("模型 %s 的 API Key 解密失败: %s", model.name, e)
         raise CustomError(
-            err_code=CustomErrorCode.AGENT_MODEL_KEY_ERROR,
+            error=CustomErrorCode.AGENT_MODEL_KEY_ERROR,
             msg=f"模型 [{model.name}] 的 API Key 解密失败",
         ) from e
 
@@ -282,7 +282,7 @@ async def _stream_openai_compatible(
             if resp.status_code != 200:
                 body = await resp.aread()
                 raise CustomError(
-                    err_code=CustomErrorCode.AGENT_LLM_REQUEST_FAILED,
+                    error=CustomErrorCode.AGENT_LLM_REQUEST_FAILED,
                     msg=f"LLM 请求失败 HTTP {resp.status_code}: {body.decode()[:300]}",
                 )
 
@@ -387,7 +387,7 @@ async def _stream_anthropic(
             if resp.status_code != 200:
                 body = await resp.aread()
                 raise CustomError(
-                    err_code=CustomErrorCode.AGENT_LLM_REQUEST_FAILED,
+                    error=CustomErrorCode.AGENT_LLM_REQUEST_FAILED,
                     msg=f"LLM 请求失败 HTTP {resp.status_code}: {body.decode()[:300]}",
                 )
 

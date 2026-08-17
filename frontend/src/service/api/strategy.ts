@@ -3,7 +3,13 @@ import { request } from '../request';
 /** ==================== AI 分析策略 API ==================== */
 
 /** get strategy list (paginated) */
-export function fetchGetStrategyList(params: { name?: string; status?: boolean; page: number; page_size: number }) {
+export function fetchGetStrategyList(params: {
+  name?: string;
+  status?: boolean;
+  category?: string;
+  page: number;
+  page_size: number;
+}) {
   return request<Api.Common.PaginatingQueryRecord<Api.Strategy.StrategyItem>>({
     url: '/admin/strategy/strategies',
     method: 'get',

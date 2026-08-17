@@ -38,8 +38,10 @@ SYSTEM_PROMPT = """你是 SmileX-AI-Stock 平台的 AI 策略分析师，负责�
 - get_hot_stocks: 股票热榜（东财/同花顺/雪球等热度排名）
 - get_market_indices: 大盘指数行情
 - get_market_fund_flow: 大盘资金流向
+- get_index_history: 大盘指数历史K线（判断指数趋势）
 - get_board_ranking: 行业/概念板块涨跌幅排行
 - get_limit_up_stocks: 涨停股池
+- get_index_constituents: 指数成分股列表（沪深300/中证500，蓝筹白马选股参考）
 - get_latest_news: 最新财经新闻
 
 工作流程：
@@ -163,7 +165,7 @@ async def _run_llm(db: AsyncSession, user_prompt: str) -> str:
             )
     else:
         raise CustomError(
-            err_code=CustomErrorCode.AGENT_MAX_ITERATIONS,
+            error=CustomErrorCode.AGENT_MAX_ITERATIONS,
             msg="策略分析达到最大工具调用轮数，未产出最终结论",
         )
 
@@ -188,6 +190,21 @@ def _build_user_prompt(
         parts.append(f"候选股票池（仅允许在该池内选择）：{', '.join(str(c) for c in pool)}")
 
     parts.append(f"最大同时持仓数：{strategy.max_positions}（当前已持仓 {len(holdings)} 只，不要超限）")
+
+    # 注入策略风控比例，约束 AI 设置的止损/止盈价格位
+    if strategy.stop_loss_pct is not None or strategy.take_profit_pct is not None:
+        parts.append(
+            "风控要求："
+            + (
+                f"止损比例约 {float(strategy.stop_loss_pct):g}%（相对买价）"
+                if strategy.stop_loss_pct is not None else ""
+            )
+            + (
+                f"，止盈目标约 {float(strategy.take_profit_pct):g}%"
+                if strategy.take_profit_pct is not None else ""
+            )
+            + "，请据此设置 stop_loss_price / target_sell_price，不得明显偏离"
+        )
 
     if holdings:
         hold_lines = [
@@ -265,23 +282,28 @@ class StrategyExecutor:
                 opened_count=opened, closed_count=closed,
             )
         except Exception as exc:  # noqa: BLE001
+            # rollback 会使已加载实例属性过期，异步上下文访问过期属性会触发
+            # 同步 lazy load（MissingGreenlet），必须先缓存再 rollback
+            strategy_id, strategy_name = strategy.id, strategy.name
+            # 项目异常（CustomError 等）消息在 .msg 属性，str(exc) 可能为空
+            err_text = str(getattr(exc, "msg", None) or exc)
             await db.rollback()
-            logger.warning("策略执行失败: strategy=%s error=%s", strategy.name, exc)
+            logger.warning("策略执行失败: strategy=%s error=%s", strategy_name, err_text)
             # 失败也要留痕（重新起一个干净对象）
             run = BusinessStrategyRun(
-                strategy_id=strategy.id,
-                strategy_name=strategy.name,
+                strategy_id=strategy_id,
+                strategy_name=strategy_name,
                 run_period=run_period,
                 run_date=now.strftime("%Y-%m-%d"),
                 trigger_type=trigger_type,
                 status=False,
-                error_msg=str(exc)[:1000],
+                error_msg=err_text[:1000],
             )
             db.add(run)
             strategy.last_executed_at = now
             await db.commit()
             return StrategyRunResult(
-                run_id=0, status=False, error_msg=str(exc)[:500]
+                run_id=0, status=False, error_msg=err_text[:500]
             )
 
     # ------------------------------------------------------------------

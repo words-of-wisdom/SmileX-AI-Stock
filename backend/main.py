@@ -67,6 +67,7 @@ async def lifespan(app: FastAPI):
     import modules.scheduler.tasks.news_sync  # noqa: F401
     import modules.scheduler.tasks.stock_hot_sync  # noqa: F401
     import modules.scheduler.tasks.stock_market_sync  # noqa: F401
+    import modules.scheduler.tasks.stock_constituent_sync  # noqa: F401
     import modules.scheduler.tasks.stock_block_trade_sync  # noqa: F401
     import modules.scheduler.tasks.strategy_run  # noqa: F401
 
