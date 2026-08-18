@@ -863,6 +863,24 @@ export function fetchGetAiModel(modelId: number) {
   });
 }
 
+/** fetch provider available models (api_key required, not persisted) */
+export function fetchAiModelModels(params: Api.SystemManage.AiModelFetchModelsParams) {
+  return request<Api.SystemManage.AiModelFetchModelsResult>({
+    url: '/admin/sys/ai-model/models',
+    method: 'post',
+    data: params
+  });
+}
+
+/** test connection with current form values (api_key optional: falls back to saved key by model_id) */
+export function fetchTestAiModelLive(params: Api.SystemManage.AiModelTestConnectionParams) {
+  return request<Api.SystemManage.AiModelTestResult>({
+    url: '/admin/sys/ai-model/test',
+    method: 'post',
+    data: params
+  });
+}
+
 /** create ai model */
 export function fetchCreateAiModel(model: Api.SystemManage.AiModelCreate) {
   const { status, is_default, ...rest } = model;

@@ -16,6 +16,7 @@ from database.models.sys.ai_model import (
     AiProviderEnum,
     AiFunctionEnum,
     AI_PROVIDER_DEFAULT_BASE_URL,
+    BILLING_MODE_PAY_AS_YOU_GO,
 )
 from modules.admin.schemas.sys.ai_model import (
     SysAiModelCreate,
@@ -24,6 +25,9 @@ from modules.admin.schemas.sys.ai_model import (
     SysAiModelBatchUpdateStatus,
     SysAiModelBindingUpsert,
     AiModelTestResult,
+    AiModelFetchModelsRequest,
+    AiModelFetchModelsResult,
+    AiModelTestConnectionRequest,
 )
 
 logger = logging.getLogger(__name__)
@@ -58,6 +62,8 @@ class AiModelService:
             conditions.append(SysAiModel.name.contains(query_params.name))
         if query_params.provider is not None:
             conditions.append(SysAiModel.provider == query_params.provider)
+        if query_params.billing_mode is not None:
+            conditions.append(SysAiModel.billing_mode == query_params.billing_mode)
         if query_params.status is not None:
             conditions.append(SysAiModel.status == query_params.status)
         if query_params.is_default is not None:
@@ -111,6 +117,7 @@ class AiModelService:
             name=model_in.name,
             provider=model_in.provider,
             base_url=model_in.base_url,
+            billing_mode=model_in.billing_mode,
             api_key_encrypted=encrypt_secret(model_in.api_key),
             model_name=model_in.model_name,
             temperature=model_in.temperature,
@@ -302,7 +309,9 @@ class AiModelService:
 
         start = time.monotonic()
         try:
-            success, message = await AiModelService._do_ping(model, api_key)
+            success, message = await AiModelService._do_ping(
+                model.provider, model.base_url, model.model_name, api_key
+            )
             latency = int((time.monotonic() - start) * 1000)
             if success:
                 return AiModelTestResult(
@@ -330,31 +339,33 @@ class AiModelService:
             )
 
     @staticmethod
-    async def _do_ping(model: SysAiModel, api_key: str) -> Tuple[bool, str]:
+    async def _do_ping(
+        provider: AiProviderEnum, base_url: str, model_name: str, api_key: str
+    ) -> Tuple[bool, str]:
         """按 provider 构造请求并执行 ping"""
         messages = [{"role": "user", "content": "ping"}]
 
-        if model.provider == AiProviderEnum.ANTHROPIC:
-            url = f"{model.base_url.rstrip('/')}/v1/messages"
+        if provider == AiProviderEnum.ANTHROPIC:
+            url = f"{base_url.rstrip('/')}/v1/messages"
             headers = {
                 "x-api-key": api_key,
                 "anthropic-version": "2023-06-01",
                 "content-type": "application/json",
             }
             payload = {
-                "model": model.model_name,
+                "model": model_name,
                 "messages": messages,
                 "max_tokens": 1,
             }
         else:
-            # OpenAI 兼容族（OPENAI/DEEPSEEK/QWEN/ZHIPU/CUSTOM）
-            url = f"{model.base_url.rstrip('/')}/chat/completions"
+            # OpenAI 兼容族（OPENAI/DEEPSEEK/QWEN/ZHIPU/MINIMAX/CUSTOM）
+            url = f"{base_url.rstrip('/')}/chat/completions"
             headers = {
                 "Authorization": f"Bearer {api_key}",
                 "content-type": "application/json",
             }
             payload = {
-                "model": model.model_name,
+                "model": model_name,
                 "messages": messages,
                 "max_tokens": 1,
             }
@@ -365,9 +376,113 @@ class AiModelService:
             return True, ""
         return False, f"HTTP {resp.status_code}: {resp.text[:200]}"
 
+    # ==================== 即时测试连接 ====================
+
+    @staticmethod
+    async def test_connection_by_params(
+        db: AsyncSession, req: AiModelTestConnectionRequest
+    ) -> AiModelTestResult:
+        """用表单当前值即时测试连通性（不落库）：api_key 优先，留空且给 model_id 时用已保存的 key"""
+        api_key = (req.api_key or "").strip()
+        if not api_key:
+            if req.model_id is None:
+                return AiModelTestResult(
+                    success=False, latency_ms=0,
+                    message="缺少 API Key（新填或留空使用已保存）",
+                    provider=req.provider, model_name=req.model_name,
+                )
+            model = await AiModelService.get_model(db, req.model_id)
+            try:
+                api_key = decrypt_secret(model.api_key_encrypted)
+            except Exception as e:
+                return AiModelTestResult(
+                    success=False, latency_ms=0, message=str(e),
+                    provider=req.provider, model_name=req.model_name,
+                )
+
+        base_url = (req.base_url or "").strip() or AiModelService.get_default_base_url(
+            req.provider, req.billing_mode
+        )
+        if not base_url:
+            return AiModelTestResult(
+                success=False, latency_ms=0, message="缺少 API 基础地址",
+                provider=req.provider, model_name=req.model_name,
+            )
+
+        start = time.monotonic()
+        try:
+            success, message = await AiModelService._do_ping(
+                req.provider, base_url, req.model_name, api_key
+            )
+            latency = int((time.monotonic() - start) * 1000)
+            if success:
+                return AiModelTestResult(
+                    success=True, latency_ms=latency,
+                    message=t("ai_model.test_success", latency=latency),
+                    provider=req.provider, model_name=req.model_name,
+                )
+            return AiModelTestResult(
+                success=False, latency_ms=latency, message=message,
+                provider=req.provider, model_name=req.model_name,
+            )
+        except Exception as e:
+            latency = int((time.monotonic() - start) * 1000)
+            return AiModelTestResult(
+                success=False, latency_ms=latency, message=str(e),
+                provider=req.provider, model_name=req.model_name,
+            )
+
+    # ==================== 获取模型列表 ====================
+
+    @staticmethod
+    async def fetch_provider_models(req: AiModelFetchModelsRequest) -> AiModelFetchModelsResult:
+        """拉取供应商可用模型列表（OpenAI 兼容 GET /models 或 Anthropic GET /v1/models）"""
+        base_url = (req.base_url or "").strip() or AiModelService.get_default_base_url(
+            req.provider, req.billing_mode
+        )
+        if not base_url:
+            return AiModelFetchModelsResult(
+                success=False, models=[], message="缺少 API 基础地址"
+            )
+
+        if req.provider == AiProviderEnum.ANTHROPIC:
+            url = f"{base_url.rstrip('/')}/v1/models"
+            headers = {"x-api-key": req.api_key, "anthropic-version": "2023-06-01"}
+        else:
+            url = f"{base_url.rstrip('/')}/models"
+            headers = {"Authorization": f"Bearer {req.api_key}"}
+
+        try:
+            async with httpx.AsyncClient(timeout=15.0) as client:
+                resp = await client.get(url, headers=headers)
+        except Exception as e:
+            return AiModelFetchModelsResult(
+                success=False, models=[], message=f"请求失败: {e}"
+            )
+
+        if resp.status_code != 200:
+            return AiModelFetchModelsResult(
+                success=False, models=[],
+                message=f"HTTP {resp.status_code}: {resp.text[:200]}",
+            )
+
+        # OpenAI 与 Anthropic 的 models 接口均为 {data: [{id: ...}, ...]}
+        try:
+            data = resp.json().get("data") or []
+            models = sorted({
+                str(it.get("id")) for it in data if isinstance(it, dict) and it.get("id")
+            })
+        except Exception as e:
+            return AiModelFetchModelsResult(
+                success=False, models=[], message=f"响应解析失败: {e}"
+            )
+        return AiModelFetchModelsResult(success=True, models=models)
+
     # ==================== 工具方法 ====================
 
     @staticmethod
-    def get_default_base_url(provider: AiProviderEnum) -> str:
-        """获取厂商默认 base_url"""
-        return AI_PROVIDER_DEFAULT_BASE_URL.get(provider, "")
+    def get_default_base_url(
+        provider: AiProviderEnum, billing_mode: str = BILLING_MODE_PAY_AS_YOU_GO
+    ) -> str:
+        """获取厂商默认 base_url（按 提供商 + 计费模式）"""
+        return AI_PROVIDER_DEFAULT_BASE_URL.get((provider, billing_mode), "")

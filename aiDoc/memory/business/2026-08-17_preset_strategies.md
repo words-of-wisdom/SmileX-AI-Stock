@@ -49,7 +49,9 @@ AI 分析模块增加策略分类与预置策略：早盘竞价、午盘、尾�
 - BaoStock `query_hs300_stocks()` 当前**不返回权重**（weight 空），排序需 `weight desc nullslast, stock_code` 兜底；工具描述勿承诺权重排序
 - 前端 i18n key 类型在 `src/typings/app.d.ts` 的 Schema 手工维护（此前已知的坑，本次再踩：加 key 必须同步 app.d.ts）
 - **服务运行中勿对业务表做 downgrade 验证**：迁移中间态（列被删）会被在线请求命中报错；验证 downgrade 应停服务或在空库演练
-- **使用前置条件**：`sys_ai_model` 需至少配置一个默认模型（「AI 助手 → LLM 配置」），否则策略执行报"场景未绑定模型且无可用默认模型"（预期行为，run 记录留痕）
+- **LLM 配置页面打开即 422**：前端筛选框发空串 `provider=`，FastAPI 把 query model（`Depends()`）拆成逐字段校验，**Enum 字段上的类级 `field_validator(mode="before")` 在该路径不生效**，空串直接触发 `Input should be 'openai', ...` 422。修法：查询参数字段用 `Annotated[Optional[Enum], BeforeValidator(parser)]`（字段级校验器 FastAPI 会采用）；body 请求不受影响（走完整 model 校验）。见 `admin/schemas/sys/ai_model.py` SysAiModelQueryParams
+- **LLM 配置菜单不可见双因**：①0009 种子的路由字段（manage_ai-model / /ai/ai-model / view.manage_ai-model）与前端 elegant-router 实际路由（ai_model / /ai/model / view.ai_model，页面在 `views/ai/model/`）不匹配——迁移 0018 幂等修正；②种子菜单默认不给角色授权（项目惯例），需在「角色管理→菜单权限」勾选或补 `sys_role_menu`（注意该表 permission 列 NOT NULL，惯例值 'read'）。同类问题排查路径：sys_menu 树 + sys_role_menu + 前端 routes.ts 三方对齐
+- **使用前置条件**：`sys_ai_model` 需至少配置一个默认模型（「AI 助手 → LLM 配置」，路由 `/ai/model`），否则策略执行报"场景未绑定模型且无可用默认模型"（预期行为，run 记录留痕）
 
 ## 后续扩展
 

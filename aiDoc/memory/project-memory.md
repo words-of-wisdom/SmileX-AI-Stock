@@ -10,6 +10,7 @@
 
 详细索引见 [business/README.md](./business/README.md)。近期：
 
+- [2026-08-17 LLM 配置增加 MiniMax + 计费模式 + 拉取模型列表](./business/2026-08-17_ai_model_minimax_billing_mode.md) — 迁移 0019 加 minimax + billing_mode（智谱两模式端点不同需区分，(provider,mode) 默认URL字典）；新端点 POST /admin/sys/ai-model/models 拉取供应商模型列表（key 必填）；前端计费模式联动 + NAutoComplete 拉取选择；坑：MappedAsDataclass 新列用 insert_default
 - [2026-08-17 AI 分析预置策略 + 策略分类 + 成分股数据](./business/2026-08-17_preset_strategies.md) — 策略表加 `category`+`is_preset`；迁移 0016 预置 10 条策略（蓝筹带 30/20 固定池）；BaoStock 成分股同步 + Agent 工具 +2；**修复策略执行必挂的 4 个休眠 bug**：id 引用列 int32 溢出（0017 改 BigInteger）、ORM Enum name/value 序列化不匹配（values_callable）、CustomError(err_code=) 参数名错 13 处、异步 rollback 后属性过期 MissingGreenlet；前置：需在「LLM 配置」配默认模型
 - [2026-08-16 AI 分析策略模块](./business/2026-08-16_ai_strategy_module.md) — 策略定制（提示词/股票池/执行时段）+ LLM 买卖点信号（复用 agent 模块，场景 STOCK_PICKING）+ 模拟盘自动跟踪（止损/预估卖点自动平仓）+ 回报率统计；`modules/strategy/` 4 张表 + 迁移 0015 + 前端 `views/ai/analysis/` 三 Tab；坑：app.d.ts i18n Schema 手工维护须同步
 - [2026-08-16 A股数据"看似没同步"诊断与修复](./business/2026-08-16_astock_sync_diagnosis_and_fix.md) — 定时任务一直在跑；真实根因：东财 push2/push2his 按 **TLS 客户端指纹过滤**（curl 200 / Python httpx+requests 被断连，时开时关）致大盘资金流自上线 0 行 → 资金流改三级链 httpx 直连→curl_cffi(chrome 指纹)→akshare；暗盘活跃股 upsert 超 asyncpg 32767 参数上限 → `_chunked_upsert` 每批 800 行；新增 `scripts/sync_astock_latest.py` 手动补拉（交易日收盘后跑，非交易日会产生伪日期戳快照）

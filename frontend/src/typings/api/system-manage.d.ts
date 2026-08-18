@@ -669,7 +669,9 @@ declare namespace Api {
      ids: number[];
    };
     /** AI 模型提供商 */
-   type AiProvider = 'openai' | 'anthropic' | 'deepseek' | 'qwen' | 'zhipu' | 'custom';
+    type AiProvider = 'openai' | 'anthropic' | 'deepseek' | 'qwen' | 'zhipu' | 'minimax' | 'custom';
+    /** AI 计费模式 */
+    type AiBillingMode = 'pay_as_you_go' | 'coding_plan';
     /** AI 功能场景 */
     type AiFunction =
       | 'stock_picking'
@@ -682,6 +684,7 @@ declare namespace Api {
       name: string;
       provider: AiProvider;
       base_url: string;
+      billing_mode: AiBillingMode;
       api_key_masked: string | null;
       model_name: string;
       temperature: number | null;
@@ -691,7 +694,7 @@ declare namespace Api {
     }>;
     /** AI 模型搜索参数 */
     type AiModelSearchParams = CommonType.RecordNullable<
-      Pick<AiModel, 'name' | 'provider' | 'status' | 'is_default'> & CommonSearchParams
+      Pick<AiModel, 'name' | 'provider' | 'billing_mode' | 'status' | 'is_default'> & CommonSearchParams
     >;
     /** AI 模型列表 */
     type AiModelList = Common.PaginatingQueryRecord<AiModel>;
@@ -708,6 +711,7 @@ declare namespace Api {
       name: string;
       provider: AiProvider;
       base_url: string;
+      billing_mode: AiBillingMode;
       api_key: string;
       model_name: string;
       temperature?: number | null;
@@ -724,6 +728,28 @@ declare namespace Api {
     type AiModelBatchUpdateStatus = {
       model_ids: number[];
       status: Common.EnableStatus;
+    };
+    /** 拉取供应商模型列表参数（api_key 必填） */
+    type AiModelFetchModelsParams = {
+      provider: AiProvider;
+      base_url?: string | null;
+      billing_mode: AiBillingMode;
+      api_key: string;
+    };
+    /** 拉取供应商模型列表结果 */
+    type AiModelFetchModelsResult = {
+      success: boolean;
+      models: string[];
+      message: string;
+    };
+    /** 即时测试连接参数（表单当前值；api_key 留空且传 modelId 时用已保存的 key） */
+    type AiModelTestConnectionParams = {
+      provider: AiProvider;
+      base_url?: string | null;
+      billing_mode: AiBillingMode;
+      model_name: string;
+      api_key?: string | null;
+      model_id?: number | null;
     };
     /** AI 场景模型绑定 */
     type AiModelBinding = {

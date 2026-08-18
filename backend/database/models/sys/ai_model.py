@@ -16,17 +16,39 @@ class AiProviderEnum(enum.Enum):
     DEEPSEEK = "deepseek"  # DeepSeek
     QWEN = "qwen"  # 通义千问
     ZHIPU = "zhipu"  # 智谱
+    MINIMAX = "minimax"  # MiniMax
     CUSTOM = "custom"  # 自定义 OpenAI 兼容
 
 
-# 各厂商默认 base_url（CUSTOM 由用户填写）
+# 计费模式常量（同一供应商不同计费模式可能对应不同端点）
+BILLING_MODE_PAY_AS_YOU_GO = "pay_as_you_go"  # 按量计费
+BILLING_MODE_CODING_PLAN = "coding_plan"  # Coding Plan 订阅
+
+BILLING_MODES = (BILLING_MODE_PAY_AS_YOU_GO, BILLING_MODE_CODING_PLAN)
+
+BILLING_MODE_NAMES = {
+    BILLING_MODE_PAY_AS_YOU_GO: "按量计费",
+    BILLING_MODE_CODING_PLAN: "Coding Plan",
+}
+
+# 各厂商默认 base_url，按 (提供商, 计费模式) 二级取值（CUSTOM 由用户填写）。
+# 同一供应商两种计费模式端点可能不同：如智谱按量 /api/paas/v4、
+# Coding Plan /api/coding/paas/v4（填错会误扣账户余额）；MiniMax 两种模式同域名。
 AI_PROVIDER_DEFAULT_BASE_URL = {
-    AiProviderEnum.OPENAI: "https://api.openai.com/v1",
-    AiProviderEnum.ANTHROPIC: "https://api.anthropic.com",
-    AiProviderEnum.DEEPSEEK: "https://api.deepseek.com/v1",
-    AiProviderEnum.QWEN: "https://dashscope.aliyuncs.com/compatible-mode/v1",
-    AiProviderEnum.ZHIPU: "https://open.bigmodel.cn/api/paas/v4",
-    AiProviderEnum.CUSTOM: "",
+    (AiProviderEnum.OPENAI, BILLING_MODE_PAY_AS_YOU_GO): "https://api.openai.com/v1",
+    (AiProviderEnum.OPENAI, BILLING_MODE_CODING_PLAN): "https://api.openai.com/v1",
+    (AiProviderEnum.ANTHROPIC, BILLING_MODE_PAY_AS_YOU_GO): "https://api.anthropic.com",
+    (AiProviderEnum.ANTHROPIC, BILLING_MODE_CODING_PLAN): "https://api.anthropic.com",
+    (AiProviderEnum.DEEPSEEK, BILLING_MODE_PAY_AS_YOU_GO): "https://api.deepseek.com/v1",
+    (AiProviderEnum.DEEPSEEK, BILLING_MODE_CODING_PLAN): "https://api.deepseek.com/v1",
+    (AiProviderEnum.QWEN, BILLING_MODE_PAY_AS_YOU_GO): "https://dashscope.aliyuncs.com/compatible-mode/v1",
+    (AiProviderEnum.QWEN, BILLING_MODE_CODING_PLAN): "https://dashscope.aliyuncs.com/compatible-mode/v1",
+    (AiProviderEnum.ZHIPU, BILLING_MODE_PAY_AS_YOU_GO): "https://open.bigmodel.cn/api/paas/v4",
+    (AiProviderEnum.ZHIPU, BILLING_MODE_CODING_PLAN): "https://open.bigmodel.cn/api/coding/paas/v4",
+    (AiProviderEnum.MINIMAX, BILLING_MODE_PAY_AS_YOU_GO): "https://api.minimaxi.com/v1",
+    (AiProviderEnum.MINIMAX, BILLING_MODE_CODING_PLAN): "https://api.minimaxi.com/v1",
+    (AiProviderEnum.CUSTOM, BILLING_MODE_PAY_AS_YOU_GO): "",
+    (AiProviderEnum.CUSTOM, BILLING_MODE_CODING_PLAN): "",
 }
 
 
@@ -59,6 +81,11 @@ class SysAiModel(Base):
     )
     base_url: Mapped[str] = mapped_column(
         String(500), nullable=False, comment="API 基础地址"
+    )
+    billing_mode: Mapped[str] = mapped_column(
+        String(20), nullable=False,
+        insert_default=BILLING_MODE_PAY_AS_YOU_GO,
+        comment="计费模式：pay_as_you_go-按量计费，coding_plan-Coding Plan 订阅",
     )
     api_key_encrypted: Mapped[str] = mapped_column(
         String(1000), nullable=False, comment="API Key（Fernet 加密）"

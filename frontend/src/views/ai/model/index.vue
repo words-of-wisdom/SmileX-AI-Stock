@@ -32,6 +32,7 @@ const modelSearchParams: Api.SystemManage.AiModelSearchParams = reactive({
   page_size: 10,
   name: null,
   provider: null,
+  billing_mode: null,
   status: null,
   is_default: null
 });
@@ -42,6 +43,7 @@ const providerLabelMap: Record<string, string> = {
   deepseek: 'DeepSeek',
   qwen: '通义千问',
   zhipu: '智谱',
+  minimax: 'MiniMax',
   custom: '自定义'
 };
 
@@ -51,7 +53,13 @@ const providerColorMap: Record<string, NaiveUI.ThemeColor> = {
   deepseek: 'info',
   qwen: 'error',
   zhipu: 'info',
+  minimax: 'primary',
   custom: 'default'
+};
+
+const billingModeLabelMap: Record<string, string> = {
+  pay_as_you_go: $t('page.manage.aiModel.payAsYouGo'),
+  coding_plan: $t('page.manage.aiModel.codingPlan')
 };
 
 const {
@@ -92,6 +100,17 @@ const {
       width: 120,
       render: (row: Api.SystemManage.AiModel) => (
         <NTag type={providerColorMap[row.provider] || 'default'}>{providerLabelMap[row.provider] || row.provider}</NTag>
+      )
+    },
+    {
+      key: 'billing_mode',
+      title: $t('page.manage.aiModel.billingMode'),
+      align: 'center',
+      width: 110,
+      render: (row: Api.SystemManage.AiModel) => (
+        <NTag type={row.billing_mode === 'coding_plan' ? 'warning' : 'default'} bordered={false}>
+          {billingModeLabelMap[row.billing_mode] || row.billing_mode}
+        </NTag>
       )
     },
     { key: 'model_name', title: $t('page.manage.aiModel.modelId'), align: 'center', minWidth: 140 },

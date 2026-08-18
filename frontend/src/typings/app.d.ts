@@ -964,13 +964,22 @@ declare namespace App {
             selectModelFirst: string;
             testConnection: string;
             testFailed: string;
+            billingMode: string;
+            payAsYouGo: string;
+            codingPlan: string;
+            fetchModels: string;
             form: {
               modelName: string;
               provider: string;
+              billingMode: string;
               modelId: string;
               baseUrl: string;
               apiKey: string;
               apiKeyEditHint: string;
+              apiKeyRequired: string;
+              modelsFetched: string;
+              modelsFetchedHint: string;
+              noModels: string;
               remark: string;
               status: string;
               isDefault: string;

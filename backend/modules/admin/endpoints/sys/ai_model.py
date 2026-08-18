@@ -22,6 +22,9 @@ from modules.admin.schemas.sys.ai_model import (
     SysAiModelBindingUpsert,
     SysAiModelBindingResponseData,
     AiModelTestResult,
+    AiModelFetchModelsRequest,
+    AiModelFetchModelsResult,
+    AiModelTestConnectionRequest,
 )
 from modules.admin.services.sys import AiModelService
 from modules.common.schemas.page import PageRequest, get_page_params, get_paginated_results
@@ -246,4 +249,36 @@ async def test_ai_model(
 ):
     """测试 AI 模型连通性"""
     result = await AiModelService.test_model_connection(db, model_id)
+    return response_base.success(data=result)
+
+
+@ai_model_router.post(
+    "/test",
+    response_model=ResponseModel[AiModelTestResult],
+    dependencies=[Depends(require_permission("sys:ai_model:list"))],
+)
+async def test_ai_model_live(
+    req: AiModelTestConnectionRequest,
+    db: AsyncSession = Depends(get_session),
+):
+    """即时测试连通性（表单当前值，不落库；api_key 留空且传 model_id 时用已保存的 key）"""
+    result = await AiModelService.test_connection_by_params(db, req)
+    return response_base.success(data=result)
+
+
+# ==================== 获取模型列表 ====================
+
+
+@ai_model_router.post(
+    "/models",
+    response_model=ResponseModel[AiModelFetchModelsResult],
+    dependencies=[Depends(require_permission("sys:ai_model:list"))],
+)
+async def fetch_ai_model_models(req: AiModelFetchModelsRequest):
+    """拉取供应商可用模型列表（用于模型标识下拉，api_key 必填、仅本次使用不落库）
+
+    失败也走 success 包裹（由 result.success 区分），避免 fail 的 data=None
+    触发 ResponseModel[AiModelFetchModelsResult] 响应校验 500。
+    """
+    result = await AiModelService.fetch_provider_models(req)
     return response_base.success(data=result)

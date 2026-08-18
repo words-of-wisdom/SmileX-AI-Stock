@@ -19,7 +19,7 @@ const model = defineModel<Api.SystemManage.AiModelSearchParams>('model', { requi
 
 const defaultModel = jsonClone(toRaw(model.value));
 
-const actionSpan = getGridActionSpan(4);
+const actionSpan = getGridActionSpan(5);
 
 const providerOptions = [
   { label: 'OpenAI', value: 'openai' },
@@ -27,7 +27,13 @@ const providerOptions = [
   { label: 'DeepSeek', value: 'deepseek' },
   { label: '通义千问', value: 'qwen' },
   { label: '智谱', value: 'zhipu' },
+  { label: 'MiniMax', value: 'minimax' },
   { label: '自定义', value: 'custom' }
+];
+
+const billingModeOptions = [
+  { label: $t('page.manage.aiModel.payAsYouGo'), value: 'pay_as_you_go' },
+  { label: $t('page.manage.aiModel.codingPlan'), value: 'coding_plan' }
 ];
 
 function resetModel() {
@@ -50,6 +56,9 @@ function search() {
           </NFormItemGi>
           <NFormItemGi span="24 s:12 m:6" :label="$t('page.manage.aiModel.provider')" path="provider" class="pr-24px">
             <NSelect v-model:value="model.provider" :options="providerOptions" :placeholder="$t('page.manage.aiModel.form.provider')" clearable />
+          </NFormItemGi>
+          <NFormItemGi span="24 s:12 m:6" :label="$t('page.manage.aiModel.billingMode')" path="billing_mode" class="pr-24px">
+            <NSelect v-model:value="model.billing_mode" :options="billingModeOptions" :placeholder="$t('page.manage.aiModel.form.billingMode')" clearable />
           </NFormItemGi>
           <NFormItemGi span="24 s:12 m:6" :label="$t('page.manage.aiModel.status')" path="status" class="pr-24px">
             <NSelect v-model:value="model.status" :options="enableStatusOptions" :placeholder="$t('page.manage.aiModel.form.status')" clearable />
