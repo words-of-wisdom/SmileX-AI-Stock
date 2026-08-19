@@ -48,6 +48,8 @@ AI 分析模块增加策略分类与预置策略：早盘竞价、午盘、尾�
 - **alembic bulk_insert 多行 INSERT 按首行键集合编译列**：行字典键不一致时，缺失键的值会被静默丢弃（无池行不带 stock_pool 键 → 有池行的池丢失）。所有行必须带相同键；JSON 列 None 会落成 JSON `null` 而非 SQL NULL，需插入后 `UPDATE ... WHERE stock_pool::text = 'null'` 清理
 - BaoStock `query_hs300_stocks()` 当前**不返回权重**（weight 空），排序需 `weight desc nullslast, stock_code` 兜底；工具描述勿承诺权重排序
 - 前端 i18n key 类型在 `src/typings/app.d.ts` 的 Schema 手工维护（此前已知的坑，本次再踩：加 key 必须同步 app.d.ts）
+- **AI 信号价格位必须做方向校验（603118 案例）**：LLM 可能把"支撑位"式价格填进 stop_loss_price，出现**止损价(19.55) > 买价(18.50)** → trade_engine 建仓 3 分钟即"止损"平仓（收益竟是 +1.3%）。修复：`trade_engine._sanitize_price_levels`——建仓时止损≥买价/目标≤买价则按策略 stop_loss_pct/take_profit_pct 重算；adjust 时目标≤现价或止损≥现价的字段忽略；建仓价强制新浪真实价（取不到保持 pending 重试，勿用 AI 报价——LLM 无个股行情工具，价格可能脱离市价）
+- **T+1 规则（2026-08-19 补）**：`position_service.is_t1_locked(buy_time, now)`（当日买入不可卖）应用于三处——track 止损/止盈触发跳过当日买入（仍刷新价格）、trade_engine sell 信号保持 pending 至下一交易日（信号过期机制保证次日 15:05 前有效）、手动平仓直接拒绝并提示；前端持仓表加"卖出价/卖出时间"列（closed 行显示，字段后端早已有）
 - **服务运行中勿对业务表做 downgrade 验证**：迁移中间态（列被删）会被在线请求命中报错；验证 downgrade 应停服务或在空库演练
 - **LLM 配置页面打开即 422**：前端筛选框发空串 `provider=`，FastAPI 把 query model（`Depends()`）拆成逐字段校验，**Enum 字段上的类级 `field_validator(mode="before")` 在该路径不生效**，空串直接触发 `Input should be 'openai', ...` 422。修法：查询参数字段用 `Annotated[Optional[Enum], BeforeValidator(parser)]`（字段级校验器 FastAPI 会采用）；body 请求不受影响（走完整 model 校验）。见 `admin/schemas/sys/ai_model.py` SysAiModelQueryParams
 - **LLM 配置菜单不可见双因**：①0009 种子的路由字段（manage_ai-model / /ai/ai-model / view.manage_ai-model）与前端 elegant-router 实际路由（ai_model / /ai/model / view.ai_model，页面在 `views/ai/model/`）不匹配——迁移 0018 幂等修正；②种子菜单默认不给角色授权（项目惯例），需在「角色管理→菜单权限」勾选或补 `sys_role_menu`（注意该表 permission 列 NOT NULL，惯例值 'read'）。同类问题排查路径：sys_menu 树 + sys_role_menu + 前端 routes.ts 三方对齐

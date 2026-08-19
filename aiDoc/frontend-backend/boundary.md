@@ -309,13 +309,25 @@ METHOD \n PATH \n timestamp \n nonce \n app_id \n sha256(body).hexdigest()
 - [ ] 分页参数和返回格式符合 `ResponsePageModel` 规范
 ---
 
-## AI 分析策略模块契约（2026-08-16，2026-08-17 更新）
+## AI 分析策略模块契约（2026-08-16，2026-08-18 更新）
 
 - 前缀 `/admin/strategy`；权限码：`strategy:manage`（策略 CRUD）、`strategy:run`（手动执行）、`strategy:position:list`（持仓/统计/跟踪日志/手动触发跟踪）、`strategy:position:close`（手动平仓）
 - 策略 CRUD：`GET/POST /strategies`、`PUT/DELETE /strategies/{id}`，分页查询走统一分页结构；`execute_periods` 为 JSON 数组（`pre_market/morning/noon/tail/post_close`），`stock_pool` 为 `{codes: string[]}`（空则 AI 全市场自选）
 - 2026-08-17 新增策略分类：`category` 字符串（`pre_market_auction/noon/tail/blue_chip/general`，自建默认 `general`）+ `is_preset` bool（系统预置标记）；列表接口新增 `category` 过滤参数；迁移 0016 预置 10 条策略（默认停用，允许编辑/删除），蓝筹白马两类带固定股票池
-- 执行：`POST /strategies/{id}/run`（同步执行，返回 `{run_id, status, signals[], opened_count, closed_count, error_msg}`）；执行记录 `GET /strategies/{id}/runs`（`parsed_signals` 为信号 JSON 数组）；执行 user prompt 注入策略 `stop_loss_pct/take_profit_pct` 风控比例
+- 2026-08-18 执行异步化 + 信号由交易引擎执行：`POST /strategies/{id}/run` 改为异步提交（毫秒级返回 `{run_id, status: "running"}`，LLM 分析在后台任务中进行，同策略并发守卫错误码 11508）；执行记录 `GET /strategies/{id}/runs` 的 `status` 由 bool 改为字符串三态 `running/success/failed`，`opened_count/closed_count` 由交易引擎执行信号时累加（分析完成时为 0）；买卖信号落新表 `business_strategy_signal`（pending/executed/skipped/failed/expired），由每分钟任务 `strategy.trade_engine`（cron `* * * * * 9-15 * * mon-fri`）按新浪实时价执行模拟买卖 + 持仓跟踪（接管原 */5 `strategy.position_track`，已下线）；执行 user prompt 注入策略 `stop_loss_pct/take_profit_pct` 风控比例
 - 持仓：`GET /positions`（`strategy_id/status/stock_code` 过滤 + 分页，`status`: holding/closed/cancelled）、`POST /positions/track`（手动触发跟踪）、`POST /positions/{id}/close`（手动平仓，body `{price?, reason?}`）、`GET /positions/{id}/tracks`、`GET /positions/stats`
 - Agent 工具新增（策略/对话共用）：`get_index_history`（指数日 K 线）、`get_index_constituents`（沪深300/中证500 成分股，数据来自 BaoStock 同步任务 `stock.constituent_sync`，每交易日 17:10）
 - 金额/比例均为 `number`（后端 Numeric → float），百分比数值不带 `%`；时间字段带时区 datetime
 - 前端 API：`src/service/api/strategy.ts`，类型 `Api.Strategy.*`（`src/typings/api/strategy.d.ts`，含 `StrategyCategory`）
+
+---
+
+## AI 大盘/板块分析模块契约（2026-08-19）
+
+- 前缀 `/admin/analysis`；权限码：`analysis:run`（手动触发生成，两菜单共享）、`analysis:list`（查询类接口，两菜单共享）；path 参数 `analysis_type`：`market`-大盘 / `sector`-板块，非法值错误码 11601
+- 生成：`POST /{analysis_type}/run`（异步提交，毫秒级返回 `{run_id, status: "running"}`，LLM 在后台任务生成，同类型并发守卫错误码 11603）；查询：`GET /{analysis_type}/latest`（最新一条含报告原文，**无记录 `data` 为 `null`**——此类可空 data 接口 response_model 必须写 `ResponseModel[X | None]`，裸 `ResponseModel[X]` 下 `success(data=None)` 会撞泛型必填校验 → 500"服务器错误"，先例 scheduler `ResponseModel[dict | None]`）、`GET /{analysis_type}/runs`（分页历史，列表项不含 `ai_raw_response`）、`GET /runs/{run_id}`（详情，错误码 11602）
+- 执行记录 `AnalysisRunItem`：`status` 字符串三态 `running/success/failed`（对齐策略 run）；`trigger_type`: `schedule`/`manual`；`parsed_result` 为 JSON 摘要——大盘 `{sentiment, score, summary, key_points[], tomorrow_outlook?}`，板块 `{rotation_summary, hot_boards: [{board_name, board_type, change_pct, viewpoint}], key_points[], tomorrow_outlook?}`，`tomorrow_outlook` 为 `{direction, summary}`（策略配置开启明日研判时才有，历史记录可能无此字段）；LLM 未按格式输出时 `parsed_result` 为 `null`（报告原文仍在 `ai_raw_response`，markdown 格式，开头可能带 ```json 摘要块，前端渲染前剥离）
+- 分析策略配置（迁移 0022，新表 `business_analysis_config`，每类型一条）：`GET /{analysis_type}/config`（无记录返回默认值 `{prompt_template: null, include_tomorrow: true}`，**data 始终非空**）、`PUT /{analysis_type}/config`（权限 `analysis:strategy`，body `{prompt_template?: string|null, include_tomorrow: boolean}`，下次生成时生效）；prompt_template 注入 user prompt「分析策略要求」段，include_tomorrow 控制 system prompt 是否追加明日研判章节
+- 定时任务 `analysis.auto_generate`（cron `5 16 * * mon-fri`，收盘行情同步后）自动生成两类分析，同日同类型已有记录则跳过；手动触发不受同日去重限制
+- 菜单：`ai_market-analysis`（大盘分析）/`ai_sector-analysis`（板块分析），挂 AI 目录（8001）下 sort 4/5，迁移 0021（含 4 个 BUTTON 行承载 `analysis:list`/`analysis:run`，MENU 行的 permission 码仅展示用——`require_permission` 只校验 BUTTON 类型）
+- 前端 API：`src/service/api/analysis.ts`，类型 `Api.Analysis.*`（`src/typings/api/analysis.d.ts`）；指数/资金流/板块排行复用 `stock-market.ts`/`stock-board.ts` 现有接口；共用报告面板 `src/views/ai/components/analysis-report-panel.vue`（最新记录 `running` 时 5s 轮询 `latest`，完成即停）

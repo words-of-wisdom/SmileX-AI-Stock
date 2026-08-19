@@ -3,14 +3,22 @@
 
 """
 策略执行器 —— 调用 LLM（复用 agent 模块模型解析 + 工具注册表），
-产出结构化买卖信号并落库为模拟持仓
+产出结构化买卖信号并落库为待执行信号（business_strategy_signal）。
+
+执行流程异步化：
+1. submit_run 创建 running 状态执行记录后立即返回（HTTP 请求毫秒级响应，
+   不再被 LLM 长耗时拖超时）
+2. LLM 分析在后台 asyncio 任务中进行（独立 session）
+3. 分析只产出待执行信号，不做买卖；模拟买卖由每分钟交易引擎
+   （modules/strategy/services/trade_engine.py）按实时价执行
 """
+import asyncio
 import json
 import logging
 import re
 from typing import Any, Optional
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.response.response_code import CustomErrorCode
@@ -19,17 +27,23 @@ from database.models.business.strategy import (
     BusinessAiStrategy,
     BusinessStrategyRun,
     BusinessStrategyPosition,
+    BusinessStrategySignal,
 )
 from database.utils.timezone import timezone
 from modules.agent.services.llm_client import resolve_model, stream_chat
 from modules.agent.services.tool_registry import get_openai_format, execute
-from modules.strategy.schemas.strategy import SignalItem, StrategyRunResult
-from modules.strategy.services.quote_helper import fetch_latest_prices
+from modules.strategy.schemas.strategy import SignalItem
 
 logger = logging.getLogger(__name__)
 
 # ReAct 最大迭代轮数（与 agent_service 保持一致）
 MAX_ITERATIONS = 8
+
+# 后台分析整体超时（秒）：LLM 单轮流式不设总时长上限，这里兜底防止任务悬挂
+ANALYSIS_TIMEOUT = 600
+
+# 后台任务强引用集合（防止 asyncio.Task 被 GC），完成后自动移除
+_BACKGROUND_TASKS: set[asyncio.Task] = set()
 
 # 系统提示词：要求 LLM 基于工具真实数据输出严格 JSON 信号
 SYSTEM_PROMPT = """你是 SmileX-AI-Stock 平台的 AI 策略分析师，负责按用户策略对A股市场进行买卖点分析。
@@ -219,17 +233,33 @@ def _build_user_prompt(
 
 
 class StrategyExecutor:
-    """策略执行器：LLM 生成信号 → 应用到模拟持仓"""
+    """策略执行器：submit_run 落库即返回，LLM 分析在后台任务中进行，
+    产出待执行信号；模拟买卖由每分钟交易引擎按实时价执行"""
 
     @staticmethod
-    async def run(
+    async def submit_run(
         db: AsyncSession,
         strategy: BusinessAiStrategy,
         run_period: str,
         trigger_type: str = "schedule",
-    ) -> StrategyRunResult:
-        """执行一次策略。异常不会向上抛（记录到 Run 表），由调用方决定后续动作。"""
-        from modules.strategy.schemas.strategy import EXECUTE_PERIOD_NAMES
+    ) -> int:
+        """提交一次策略执行：创建 running 状态执行记录并立即返回 run_id，
+        LLM 分析在后台 asyncio 任务中进行（独立 session，只传 id 不传 ORM 实例）。
+
+        同一策略并发守卫：已存在 running 记录时抛 STRATEGY_ALREADY_RUNNING。
+        """
+        dup = await db.execute(
+            select(BusinessStrategyRun.id).where(
+                BusinessStrategyRun.strategy_id == strategy.id,
+                BusinessStrategyRun.status == "running",
+                BusinessStrategyRun.deleted_at.is_(None),
+            ).limit(1)
+        )
+        if dup.scalar_one_or_none() is not None:
+            raise CustomError(
+                error=CustomErrorCode.STRATEGY_ALREADY_RUNNING,
+                msg="该策略正在执行中，请稍后再试",
+            )
 
         now = timezone.now()
         run = BusinessStrategyRun(
@@ -238,145 +268,149 @@ class StrategyExecutor:
             run_period=run_period,
             run_date=now.strftime("%Y-%m-%d"),
             trigger_type=trigger_type,
-            status=False,
+            status="running",
         )
         db.add(run)
+        strategy.last_executed_at = now
+        await db.commit()  # expire_on_commit=False，flush 后 run.id 可直接取用
 
-        try:
-            # 1. 取当前持仓
-            hold_result = await db.execute(
-                select(BusinessStrategyPosition).where(
-                    BusinessStrategyPosition.strategy_id == strategy.id,
-                    BusinessStrategyPosition.status == "holding",
-                    BusinessStrategyPosition.deleted_at.is_(None),
-                )
-            )
-            holdings = list(hold_result.scalars().all())
-
-            # 2. LLM 分析
-            user_prompt = _build_user_prompt(
-                strategy, holdings, EXECUTE_PERIOD_NAMES.get(run_period, run_period)
-            )
-            raw_text = await _run_llm(db, user_prompt)
-            run.ai_raw_response = raw_text[:20000]
-
-            # 3. 解析信号
-            raw_signals = _extract_json_array(raw_text)
-            signals = [s for s in (_to_signal(r) for r in raw_signals if isinstance(r, dict)) if s]
-            run.parsed_signals = [s.model_dump() for s in signals]
-
-            # 4. 应用信号
-            opened, closed = await StrategyExecutor._apply_signals(db, strategy, signals, holdings)
-            run.opened_count = opened
-            run.closed_count = closed
-            run.status = True
-
-            strategy.last_executed_at = now
-            await db.commit()
-            logger.info(
-                "策略执行完成: strategy=%s period=%s signals=%d opened=%d closed=%d",
-                strategy.name, run_period, len(signals), opened, closed,
-            )
-            return StrategyRunResult(
-                run_id=0, status=True, signals=signals,
-                opened_count=opened, closed_count=closed,
-            )
-        except Exception as exc:  # noqa: BLE001
-            # rollback 会使已加载实例属性过期，异步上下文访问过期属性会触发
-            # 同步 lazy load（MissingGreenlet），必须先缓存再 rollback
-            strategy_id, strategy_name = strategy.id, strategy.name
-            # 项目异常（CustomError 等）消息在 .msg 属性，str(exc) 可能为空
-            err_text = str(getattr(exc, "msg", None) or exc)
-            await db.rollback()
-            logger.warning("策略执行失败: strategy=%s error=%s", strategy_name, err_text)
-            # 失败也要留痕（重新起一个干净对象）
-            run = BusinessStrategyRun(
-                strategy_id=strategy_id,
-                strategy_name=strategy_name,
-                run_period=run_period,
-                run_date=now.strftime("%Y-%m-%d"),
-                trigger_type=trigger_type,
-                status=False,
-                error_msg=err_text[:1000],
-            )
-            db.add(run)
-            strategy.last_executed_at = now
-            await db.commit()
-            return StrategyRunResult(
-                run_id=0, status=False, error_msg=err_text[:500]
-            )
+        task = asyncio.create_task(
+            StrategyExecutor._execute_analysis(run.id, strategy.id, run_period)
+        )
+        _BACKGROUND_TASKS.add(task)
+        task.add_done_callback(_BACKGROUND_TASKS.discard)
+        logger.info(
+            "已提交策略执行: strategy=%s run_id=%s period=%s trigger=%s",
+            strategy.name, run.id, run_period, trigger_type,
+        )
+        return run.id
 
     # ------------------------------------------------------------------
-    # 信号应用
+    # 后台分析
     # ------------------------------------------------------------------
     @staticmethod
-    async def _apply_signals(
-        db: AsyncSession,
-        strategy: BusinessAiStrategy,
-        signals: list[SignalItem],
-        holdings: list[BusinessStrategyPosition],
-    ) -> tuple[int, int]:
-        """把信号应用到模拟持仓，返回 (新建仓数, 平仓数)"""
-        now = timezone.now()
-        holding_map = {h.stock_code: h for h in holdings}
-        opened = closed = 0
+    async def _execute_analysis(run_id: int, strategy_id: int, run_period: str) -> None:
+        """后台分析入口：独立 session + 整体超时兜底，任何异常都回写 Run 失败状态"""
+        from database.db_manager import get_session
 
-        # 批量取信号涉及个股的最新价（建仓用真实价格）
-        codes = list({s.stock_code for s in signals})
-        prices = await fetch_latest_prices(codes) if codes else {}
-
-        for sig in signals:
-            pos = holding_map.get(sig.stock_code)
-
-            # ---- 买入：未持仓且还有容量 ----
-            if sig.action == "buy" and pos is None:
-                if len(holding_map) >= strategy.max_positions:
-                    continue
-                price = prices.get(sig.stock_code) or sig.buy_price
-                if not price:
-                    logger.warning("买入信号无法确定价格，跳过: %s", sig.stock_code)
-                    continue
-                pos = BusinessStrategyPosition(
-                    strategy_id=strategy.id,
-                    strategy_name=strategy.name,
-                    stock_code=sig.stock_code,
-                    stock_name=sig.stock_name or sig.stock_code,
-                    buy_price=price,
-                    buy_time=now,
-                    buy_reason=sig.reason,
-                    target_sell_price=sig.target_sell_price,
-                    stop_loss_price=sig.stop_loss_price,
-                    status="holding",
-                    latest_price=price,
-                    floating_pnl_pct=0.0,
-                    tracked_at=now,
+        async for db in get_session():
+            try:
+                await asyncio.wait_for(
+                    StrategyExecutor._analyze(db, run_id, strategy_id, run_period),
+                    timeout=ANALYSIS_TIMEOUT,
                 )
-                db.add(pos)
-                holding_map[sig.stock_code] = pos
-                opened += 1
+            except Exception as exc:  # noqa: BLE001  含 TimeoutError
+                if isinstance(exc, asyncio.TimeoutError):
+                    err_text = f"分析执行超时（超过 {ANALYSIS_TIMEOUT} 秒）"
+                else:
+                    # 项目异常（CustomError 等）消息在 .msg 属性，str(exc) 可能为空
+                    err_text = str(getattr(exc, "msg", None) or exc)
+                logger.warning("策略后台分析失败: run_id=%s error=%s", run_id, err_text)
+                try:
+                    await db.rollback()
+                    await db.execute(
+                        update(BusinessStrategyRun)
+                        .where(BusinessStrategyRun.id == run_id)
+                        .values(status="failed", error_msg=err_text[:1000])
+                        .execution_options(synchronize_session=False)
+                    )
+                    await db.commit()
+                except Exception:  # noqa: BLE001
+                    logger.exception("回写失败 Run 记录异常: run_id=%s", run_id)
+
+    @staticmethod
+    async def _analyze(
+        db: AsyncSession, run_id: int, strategy_id: int, run_period: str
+    ) -> None:
+        """分析主体：LLM 生成信号 -> 作废旧待执行信号 -> 写入新待执行信号。
+
+        本步不做任何买卖 —— 模拟买卖由交易引擎每分钟按实时价执行。
+        """
+        from modules.strategy.schemas.strategy import EXECUTE_PERIOD_NAMES
+
+        run_result = await db.execute(
+            select(BusinessStrategyRun).where(
+                BusinessStrategyRun.id == run_id,
+                BusinessStrategyRun.deleted_at.is_(None),
+            )
+        )
+        run = run_result.scalar_one_or_none()
+        if run is None:
+            logger.warning("策略执行记录不存在，放弃分析: run_id=%s", run_id)
+            return
+
+        str_result = await db.execute(
+            select(BusinessAiStrategy).where(
+                BusinessAiStrategy.id == strategy_id,
+                BusinessAiStrategy.deleted_at.is_(None),
+            )
+        )
+        strategy = str_result.scalar_one_or_none()
+        if strategy is None:
+            run.status = "failed"
+            run.error_msg = "策略不存在或已删除"
+            await db.commit()
+            return
+
+        # 1. 取当前持仓
+        hold_result = await db.execute(
+            select(BusinessStrategyPosition).where(
+                BusinessStrategyPosition.strategy_id == strategy.id,
+                BusinessStrategyPosition.status == "holding",
+                BusinessStrategyPosition.deleted_at.is_(None),
+            )
+        )
+        holdings = list(hold_result.scalars().all())
+
+        # 2. LLM 分析
+        user_prompt = _build_user_prompt(
+            strategy, holdings, EXECUTE_PERIOD_NAMES.get(run_period, run_period)
+        )
+        raw_text = await _run_llm(db, user_prompt)
+        run.ai_raw_response = raw_text[:20000]
+
+        # 3. 解析信号
+        raw_signals = _extract_json_array(raw_text)
+        signals = [s for s in (_to_signal(r) for r in raw_signals if isinstance(r, dict)) if s]
+        run.parsed_signals = [s.model_dump() for s in signals]
+
+        # 4. 作废同策略旧待执行信号（新一轮分析信号替换旧信号）
+        await db.execute(
+            update(BusinessStrategySignal)
+            .where(
+                BusinessStrategySignal.strategy_id == strategy.id,
+                BusinessStrategySignal.status == "pending",
+                BusinessStrategySignal.deleted_at.is_(None),
+            )
+            .values(status="expired", result_msg="被新一轮分析信号替换")
+            .execution_options(synchronize_session=False)
+        )
+
+        # 5. 写入新待执行信号（hold 无点位变化，不落表）
+        pending = 0
+        for sig in signals:
+            if sig.action == "hold":
                 continue
+            db.add(BusinessStrategySignal(
+                strategy_id=strategy.id,
+                strategy_name=strategy.name,
+                run_id=run.id,
+                run_period=run_period,
+                run_date=run.run_date,
+                stock_code=sig.stock_code,
+                stock_name=sig.stock_name or sig.stock_code,
+                action=sig.action,
+                ref_buy_price=sig.buy_price,
+                target_sell_price=sig.target_sell_price,
+                stop_loss_price=sig.stop_loss_price,
+                reason=sig.reason,
+                status="pending",
+            ))
+            pending += 1
 
-            if pos is None:
-                continue
-
-            # ---- 卖出：直接平仓 ----
-            if sig.action == "sell":
-                price = prices.get(sig.stock_code) or pos.latest_price or float(pos.buy_price)
-                pos.status = "closed"
-                pos.sell_price = price
-                pos.sell_time = now
-                pos.sell_reason = "ai_signal"
-                pos.latest_price = price
-                pos.return_rate = round((price - float(pos.buy_price)) / float(pos.buy_price) * 100, 4)
-                pos.floating_pnl_pct = pos.return_rate
-                closed += 1
-                continue
-
-            # ---- 调整：更新预估卖点/止损价 ----
-            if sig.action == "adjust":
-                if sig.target_sell_price:
-                    pos.target_sell_price = sig.target_sell_price
-                if sig.stop_loss_price:
-                    pos.stop_loss_price = sig.stop_loss_price
-
-        return opened, closed
+        run.status = "success"
+        await db.commit()
+        logger.info(
+            "策略分析完成: strategy=%s period=%s signals=%d pending_signals=%d",
+            strategy.name, run_period, len(signals), pending,
+        )

@@ -7,6 +7,7 @@ AI 分析策略表
 模拟盘跟踪持仓并计算回报率
 - BusinessAiStrategy: 策略配置
 - BusinessStrategyRun: 策略执行记录（AI 原始输出 + 解析后的信号）
+- BusinessStrategySignal: 待执行买卖信号（LLM 分析产出，由每分钟交易引擎按实时价执行）
 - BusinessStrategyPosition: 个股模拟持仓（买点/预估卖点/跟踪/回报率）
 - BusinessPositionTrackLog: 持仓跟踪日志（每次跟踪的价格与浮盈快照）
 """
@@ -91,8 +92,9 @@ class BusinessStrategyRun(Base):
         String(20), nullable=False, default="schedule",
         comment="触发方式：schedule-定时，manual-手动"
     )
-    status: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, default=False, comment="执行状态：True-成功，False-失败"
+    status: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="running",
+        comment="执行状态：running-执行中，success-成功，failed-失败",
     )
     ai_raw_response: Mapped[Optional[str]] = mapped_column(
         Text, nullable=True, default=None, comment="AI 原始回复文本"
@@ -101,13 +103,70 @@ class BusinessStrategyRun(Base):
         JSON, nullable=True, default=None, comment="解析后的结构化信号列表"
     )
     opened_count: Mapped[int] = mapped_column(
-        Integer, nullable=False, default=0, comment="本次新建仓数量"
+        Integer, nullable=False, default=0, comment="新建仓数量（交易引擎执行信号时累加）"
     )
     closed_count: Mapped[int] = mapped_column(
-        Integer, nullable=False, default=0, comment="本次平仓数量"
+        Integer, nullable=False, default=0, comment="平仓数量（交易引擎执行信号时累加）"
     )
     error_msg: Mapped[Optional[str]] = mapped_column(
         Text, nullable=True, default=None, comment="错误信息"
+    )
+
+
+class BusinessStrategySignal(Base):
+    """策略待执行买卖信号表（LLM 分析产出，交易引擎每分钟按实时价执行模拟买卖）"""
+
+    __table_args__ = (
+        Index("ix_strategy_signal_strategy_status", "strategy_id", "status"),
+        Index("ix_strategy_signal_run", "run_id"),
+        Index("ix_strategy_signal_stock", "stock_code"),
+        {"comment": "策略待执行买卖信号表"},
+    )
+
+    strategy_id: Mapped[int] = mapped_column(
+        BigInteger, nullable=False, comment="策略 ID"
+    )
+    strategy_name: Mapped[str] = mapped_column(
+        String(100), nullable=False, comment="策略名称（信号产生时快照）"
+    )
+    run_id: Mapped[int] = mapped_column(
+        BigInteger, nullable=False, comment="来源执行记录 ID"
+    )
+    run_period: Mapped[str] = mapped_column(
+        String(20), nullable=False, comment="执行时段：pre_market/morning/noon/tail/post_close/manual"
+    )
+    run_date: Mapped[str] = mapped_column(
+        String(10), nullable=False, comment="信号产生日期 YYYY-MM-DD（过期判断用）"
+    )
+    stock_code: Mapped[str] = mapped_column(String(20), nullable=False, comment="证券代码")
+    stock_name: Mapped[str] = mapped_column(String(50), nullable=False, comment="证券简称")
+    action: Mapped[str] = mapped_column(
+        String(10), nullable=False, comment="信号动作：buy-买入，sell-卖出平仓，adjust-调整卖点/止损"
+    )
+    ref_buy_price: Mapped[Optional[float]] = mapped_column(
+        Numeric(16, 4), nullable=True, default=None, comment="AI 参考买价"
+    )
+    target_sell_price: Mapped[Optional[float]] = mapped_column(
+        Numeric(16, 4), nullable=True, default=None, comment="预估卖点（目标价）"
+    )
+    stop_loss_price: Mapped[Optional[float]] = mapped_column(
+        Numeric(16, 4), nullable=True, default=None, comment="止损价"
+    )
+    reason: Mapped[Optional[str]] = mapped_column(
+        String(500), nullable=True, default=None, comment="AI 给出的信号理由"
+    )
+    status: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="pending", index=True,
+        comment="信号状态：pending-待执行，executed-已执行，skipped-已跳过，failed-执行失败，expired-已过期",
+    )
+    executed_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True, default=None, comment="执行时间"
+    )
+    executed_price: Mapped[Optional[float]] = mapped_column(
+        Numeric(16, 4), nullable=True, default=None, comment="实际成交价"
+    )
+    result_msg: Mapped[Optional[str]] = mapped_column(
+        String(500), nullable=True, default=None, comment="执行结果说明（跳过/失败原因）"
     )
 
 

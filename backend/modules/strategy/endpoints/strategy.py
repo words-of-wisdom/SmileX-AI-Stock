@@ -19,7 +19,7 @@ from modules.strategy.services.position_service import PositionService
 from modules.strategy.schemas.strategy import (
     StrategyCreateRequest,
     StrategyItem,
-    StrategyRunResult,
+    StrategyRunSubmitResult,
     StrategyRunItem,
 )
 
@@ -108,8 +108,8 @@ async def delete_strategy(
 # ----------------------------------------------------------------------
 @strategy_router.post(
     "/{strategy_id}/run",
-    response_model=ResponseModel[StrategyRunResult],
-    summary="手动触发一次策略执行",
+    response_model=ResponseModel[StrategyRunSubmitResult],
+    summary="手动触发一次策略执行（异步，立即返回）",
     dependencies=[Depends(require_permission("strategy:run"))],
 )
 async def run_strategy(
@@ -117,10 +117,14 @@ async def run_strategy(
     user=Depends(current_user),
     db: AsyncSession = Depends(get_session),
 ):
-    """手动执行策略：LLM 分析并应用买卖信号到模拟持仓"""
+    """手动执行策略：创建执行记录后立即返回，LLM 分析在后台进行；
+    产出的买卖信号由每分钟交易引擎按实时价执行模拟买卖"""
     strategy = await StrategyService.get_by_id(db, strategy_id)
-    result = await StrategyExecutor.run(db, strategy, run_period="manual", trigger_type="manual")
-    return response_base.success(data=result, msg="执行成功" if result.status else "执行失败")
+    run_id = await StrategyExecutor.submit_run(db, strategy, run_period="manual", trigger_type="manual")
+    return response_base.success(
+        data=StrategyRunSubmitResult(run_id=run_id),
+        msg="已提交执行，分析完成后信号将由交易引擎执行",
+    )
 
 
 @strategy_router.get(

@@ -89,7 +89,7 @@ class StrategyRunItem(BaseModel):
     run_period: str
     run_date: str
     trigger_type: str
-    status: bool
+    status: str  # running-执行中，success-成功，failed-失败
     parsed_signals: Optional[list] = None
     opened_count: int
     closed_count: int
@@ -109,15 +109,11 @@ class SignalItem(BaseModel):
     reason: Optional[str] = None
 
 
-class StrategyRunResult(BaseModel):
-    """策略执行结果"""
+class StrategyRunSubmitResult(BaseModel):
+    """策略执行提交结果（异步执行：接口立即返回，结果见执行记录）"""
 
     run_id: int
-    status: bool
-    signals: list[SignalItem] = []
-    opened_count: int = 0
-    closed_count: int = 0
-    error_msg: Optional[str] = None
+    status: str = "running"
 
 
 class PositionItem(BaseModel):

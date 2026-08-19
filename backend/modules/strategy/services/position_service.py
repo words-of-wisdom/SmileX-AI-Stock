@@ -5,6 +5,7 @@
 持仓服务：跟踪刷新、查询、手动平仓、跟踪日志、回报率统计
 """
 import logging
+from datetime import datetime
 from typing import Optional
 
 from sqlalchemy import select, func, case
@@ -23,6 +24,11 @@ from modules.strategy.schemas.strategy import PositionItem, TrackLogItem, Strate
 logger = logging.getLogger(__name__)
 
 
+def is_t1_locked(buy_time: datetime, now: datetime) -> bool:
+    """A股 T+1 规则：当日买入的持仓当日不可卖出（含止损/止盈/信号卖出）"""
+    return buy_time.date() == now.date()
+
+
 class PositionService:
     """策略持仓服务类"""
 
@@ -30,10 +36,12 @@ class PositionService:
     # 持仓跟踪（定时任务调用）
     # ------------------------------------------------------------------
     @staticmethod
-    async def track_positions(db: AsyncSession) -> dict:
+    async def track_positions(db: AsyncSession, prices: dict[str, float] | None = None) -> dict:
         """刷新全部持仓中个股的最新价/浮盈，触发止损/止盈/目标价自动平仓。
 
-        返回：{tracked, closed, failed}
+        prices: 调用方已批量拉取的实时价映射（交易引擎传入，避免重复拉取），
+                为 None 时自行拉取。
+        返回：{tracked, closed, failed, total}
         """
         now = timezone.now()
         result = await db.execute(
@@ -44,10 +52,11 @@ class PositionService:
         )
         positions = list(result.scalars().all())
         if not positions:
-            return {"tracked": 0, "closed": 0}
+            return {"tracked": 0, "closed": 0, "total": 0}
 
-        codes = list({p.stock_code for p in positions})
-        prices = await fetch_latest_prices(codes)
+        if prices is None:
+            codes = list({p.stock_code for p in positions})
+            prices = await fetch_latest_prices(codes)
 
         tracked = closed = 0
         for pos in positions:
@@ -67,12 +76,13 @@ class PositionService:
             pos.tracked_at = now
             tracked += 1
 
-            # ---- 触发条件判断：止损 / 止盈 / 达到预估卖点 ----
+            # ---- 触发条件判断：止损 / 止盈 / 达到预估卖点（T+1：当日买入不可卖） ----
             sell_reason = None
-            if pos.stop_loss_price and price <= float(pos.stop_loss_price):
-                sell_reason = "stop_loss"
-            elif pos.target_sell_price and price >= float(pos.target_sell_price):
-                sell_reason = "target_reached"
+            if not is_t1_locked(pos.buy_time, now):
+                if pos.stop_loss_price and price <= float(pos.stop_loss_price):
+                    sell_reason = "stop_loss"
+                elif pos.target_sell_price and price >= float(pos.target_sell_price):
+                    sell_reason = "target_reached"
 
             if sell_reason:
                 pos.status = "closed"
@@ -172,6 +182,11 @@ class PositionService:
             raise CustomError(
                 error=CustomErrorCode.POSITION_ALREADY_CLOSED,
                 msg=f"持仓 [{pos.stock_name}] 已平仓",
+            )
+        if is_t1_locked(pos.buy_time, now):
+            raise CustomError(
+                error=CustomErrorCode.POSITION_ALREADY_CLOSED,
+                msg=f"持仓 [{pos.stock_name}] 当日买入（T+1 规则），最早下一交易日卖出",
             )
 
         sell_price = price

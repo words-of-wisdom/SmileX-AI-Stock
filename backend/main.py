@@ -21,6 +21,7 @@ from modules.openapi.router import open_router
 from modules.stock.router import router as stock_router
 from modules.agent.router import router as agent_router
 from modules.strategy.router import router as strategy_router
+from modules.analysis.router import router as analysis_router
 from modules.demo.router import router as demo_router
 from modules.admin.endpoints.sys.health import health_router
 from core.registry.setup_registry import setup_app
@@ -70,6 +71,7 @@ async def lifespan(app: FastAPI):
     import modules.scheduler.tasks.stock_constituent_sync  # noqa: F401
     import modules.scheduler.tasks.stock_block_trade_sync  # noqa: F401
     import modules.scheduler.tasks.strategy_run  # noqa: F401
+    import modules.scheduler.tasks.analysis_run  # noqa: F401
 
     manager = SchedulerManager.get_instance()
     manager.start()
@@ -137,6 +139,8 @@ app.include_router(stock_router)
 app.include_router(agent_router)
 # AI 分析策略模块（策略定制 + 定时执行 + 模拟盘跟踪）
 app.include_router(strategy_router)
+# AI 大盘/板块分析模块（异步生成 + 历史回看 + 收盘后定时生成）
+app.include_router(analysis_router)
 # 示例模块（akshare / Baostock SDK 简单调用演示）
 app.include_router(demo_router)
 # 开放API（商户 HMAC 签名鉴权）

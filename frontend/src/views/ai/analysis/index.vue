@@ -129,20 +129,13 @@ const runningIds = ref<number[]>([]);
 async function onRunStrategy(row: Api.Strategy.StrategyItem) {
   runningIds.value.push(row.id);
   try {
-    const { data, error } = await fetchRunStrategy(row.id);
+    const { error } = await fetchRunStrategy(row.id);
     if (!error) {
-      if (data?.status) {
-        window.$message?.success(
-          $t('page.aiStrategy.runSuccess', {
-            signals: data.signals.length,
-            opened: data.opened_count,
-            closed: data.closed_count
-          })
-        );
-      } else {
-        window.$message?.error(`${$t('page.aiStrategy.runFailed')}: ${data?.error_msg ?? ''}`);
-      }
-      await Promise.all([loadStrategies(true), loadPositions(true)]);
+      // 执行已异步化：接口提交即返回，LLM 分析在后台进行，
+      // 买卖信号由每分钟交易引擎按实时价执行
+      window.$message?.success($t('page.aiStrategy.runSubmitted'));
+      await loadStrategies(true);
+      if (runHistoryStrategy.value?.id === row.id) await loadRunHistory();
     }
   } finally {
     runningIds.value = runningIds.value.filter(id => id !== row.id);
@@ -339,8 +332,15 @@ const runColumns = computed<DataTableColumns<Api.Strategy.StrategyRunItem>>(() =
     key: 'status',
     title: $t('page.aiStrategy.execStatus'),
     width: 80,
-    render: row =>
-      row.status ? (
+    render: row => {
+      if (row.status === 'running') {
+        return (
+          <NTag type="info" size="small" bordered={false}>
+            {$t('page.aiStrategy.execRunning')}
+          </NTag>
+        );
+      }
+      return row.status === 'success' ? (
         <NTag type="success" size="small" bordered={false}>
           {$t('page.aiStrategy.execOk')}
         </NTag>
@@ -348,7 +348,8 @@ const runColumns = computed<DataTableColumns<Api.Strategy.StrategyRunItem>>(() =
         <NTag type="error" size="small" bordered={false}>
           {$t('page.aiStrategy.execFail')}
         </NTag>
-      )
+      );
+    }
   },
   { key: 'opened_count', title: $t('page.aiStrategy.openedCount'), width: 80, align: 'right' },
   { key: 'closed_count', title: $t('page.aiStrategy.closedCount2'), width: 80, align: 'right' },
@@ -562,6 +563,24 @@ const positionColumns = computed<DataTableColumns<Api.Strategy.PositionItem>>(()
     width: 100,
     align: 'right',
     render: row => renderPct(row.return_rate)
+  },
+  {
+    key: 'sell_price',
+    title: $t('page.aiStrategy.sellPrice'),
+    width: 90,
+    align: 'right',
+    render: row =>
+      row.sell_price ? (
+        <span style={{ fontWeight: '500' }}>{Number(row.sell_price).toFixed(2)}</span>
+      ) : (
+        <NText depth={3}>-</NText>
+      )
+  },
+  {
+    key: 'sell_time',
+    title: $t('page.aiStrategy.sellTime'),
+    width: 140,
+    render: row => <span class="text-12px">{row.sell_time ? fmtTime(row.sell_time) : '-'}</span>
   },
   {
     key: 'actions',
@@ -800,7 +819,7 @@ onMounted(() => {
           :data="positionList"
           size="small"
           :loading="positionLoading"
-          :scroll-x="1300"
+          :scroll-x="1550"
           :row-key="(row: Api.Strategy.PositionItem) => row.id"
         />
         <div class="mt-12px flex items-center justify-between">

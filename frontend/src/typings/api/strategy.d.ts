@@ -61,7 +61,7 @@ declare namespace Api {
       run_period: string;
       run_date: string;
       trigger_type: 'schedule' | 'manual';
-      status: boolean;
+      status: 'running' | 'success' | 'failed';
       parsed_signals: SignalItem[] | null;
       opened_count: number;
       closed_count: number;
@@ -69,14 +69,10 @@ declare namespace Api {
       created_at: string | null;
     }
 
-    /** 策略执行结果 */
+    /** 策略执行提交结果（异步执行：接口立即返回，结果见执行记录） */
     export interface StrategyRunResult {
       run_id: number;
-      status: boolean;
-      signals: SignalItem[];
-      opened_count: number;
-      closed_count: number;
-      error_msg: string | null;
+      status: string;
     }
 
     /** 持仓 */

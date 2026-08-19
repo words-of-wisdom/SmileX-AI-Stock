@@ -4,9 +4,12 @@
 """
 AI 分析策略定时任务
 1. strategy_run_execute: 周一至周五 9-16 点每 10 分钟检查启用策略，
-   按当前时间匹配执行时段（集合竞价/早盘/午盘/尾盘/盘后）触发 LLM 分析
-2. strategy_position_track: 交易时段内每 5 分钟刷新持仓最新价/浮盈，
-   触发止损/止盈/预估卖点自动平仓
+   按当前时间匹配执行时段（集合竞价/早盘/午盘/尾盘/盘后）异步提交
+   LLM 分析（submit_run 落库即返回，分析在后台任务中进行）
+2. strategy_trade_engine: 周一至周五 9-15 点每分钟执行模拟交易引擎 ——
+   拉取策略股票实时行情，按实时价执行待执行买卖信号（模拟买卖）、
+   刷新持仓最新价/浮盈并触发止损/止盈/目标价自动平仓
+   （接管原 strategy.position_track 每 5 分钟持仓跟踪职责）
 
 说明：与 stock_hot_sync 相同的坑——APScheduler 星期字段 Monday=0，
 数字 "1-5" 实为周二至周六，必须用 mon-fri。
@@ -15,6 +18,7 @@ AI 分析策略定时任务
 import logging
 from datetime import datetime, time as dt_time
 
+from core.exception.errors import CustomError
 from modules.scheduler.core.registry import scheduled_task
 
 logger = logging.getLogger(__name__)
@@ -29,12 +33,6 @@ _PERIOD_WINDOWS: dict[str, tuple[dt_time, dt_time]] = {
     "post_close": (dt_time(15, 5), dt_time(16, 0)),   # 盘后
 }
 
-# 连续竞价时段（持仓跟踪窗口）
-_TRADING_WINDOWS: tuple[tuple[dt_time, dt_time], ...] = (
-    (dt_time(9, 30), dt_time(11, 30)),
-    (dt_time(13, 0), dt_time(15, 0)),
-)
-
 
 def _match_period(now: datetime) -> str | None:
     """当前时间命中的执行时段（周一至周五）"""
@@ -47,22 +45,15 @@ def _match_period(now: datetime) -> str | None:
     return None
 
 
-def _in_trading_hours(now: datetime) -> bool:
-    if now.weekday() >= 5:
-        return False
-    current = now.time()
-    return any(start <= current <= end for start, end in _TRADING_WINDOWS)
-
-
 @scheduled_task(
     cron="*/10 9-16 * * mon-fri",
     name="AI策略时段执行",
-    description="按各启用策略配置的执行时段（集合竞价/早盘/午盘/尾盘/盘后）触发 LLM 买卖点分析，同日同时段去重",
+    description="按各启用策略配置的执行时段（集合竞价/早盘/午盘/尾盘/盘后）异步提交 LLM 买卖点分析，同日同时段去重；买卖信号由模拟交易引擎按实时价执行",
     task_key="strategy.run_execute",
     is_system=True,
 )
 async def strategy_run_execute():
-    """检查并执行当前时段命中的启用策略"""
+    """检查并异步提交当前时段命中的启用策略（LLM 分析在后台任务中进行）"""
     from sqlalchemy import select
 
     from database.db_manager import get_session
@@ -77,7 +68,7 @@ async def strategy_run_execute():
         return {"skipped": True, "reason": "非策略执行时段"}
 
     run_date = now.strftime("%Y-%m-%d")
-    total = {"period": period, "executed": 0, "skipped": 0, "failed": 0}
+    total = {"period": period, "submitted": 0, "skipped": 0, "rejected": 0}
     async for db in get_session():
         strategies = await StrategyService.get_enabled(db)
         for strategy in strategies:
@@ -96,32 +87,28 @@ async def strategy_run_execute():
             if dup.scalar_one_or_none() is not None:
                 total["skipped"] += 1
                 continue
-            result = await StrategyExecutor.run(db, strategy, run_period=period)
-            if result.status:
-                total["executed"] += 1
-            else:
-                total["failed"] += 1
+            try:
+                await StrategyExecutor.submit_run(db, strategy, run_period=period)
+                total["submitted"] += 1
+            except CustomError:
+                # 并发守卫：该策略已有 running 记录（如手动触发正在进行）
+                total["rejected"] += 1
     return total
 
 
 @scheduled_task(
-    cron="*/5 9-15 * * mon-fri",
-    name="AI策略持仓跟踪",
-    description="交易时段内每 5 分钟刷新策略持仓最新价/浮盈，触发止损/止盈/预估卖点自动平仓并计算收益率",
-    task_key="strategy.position_track",
+    cron="* * * * * 9-15 * * mon-fri",
+    name="AI策略模拟交易引擎",
+    description="交易日内每分钟拉取策略股票实时行情：按实时价执行待执行买卖信号（模拟买卖）+ 刷新持仓价格浮盈 + 止损/止盈/目标价自动平仓",
+    task_key="strategy.trade_engine",
     is_system=True,
 )
-async def strategy_position_track():
-    """交易时段内刷新全部策略持仓"""
+async def strategy_trade_engine():
+    """每分钟模拟交易引擎 tick（交易时段判断在引擎内部）"""
     from database.db_manager import get_session
-    from database.utils.timezone import timezone
-    from modules.strategy.services.position_service import PositionService
+    from modules.strategy.services.trade_engine import TradeEngine
 
-    now = timezone.now()
-    if not _in_trading_hours(now):
-        return {"skipped": True, "reason": "非交易时段"}
-
-    total = {"tracked": 0, "closed": 0}
+    total = {}
     async for db in get_session():
-        total = await PositionService.track_positions(db)
+        total = await TradeEngine.execute_tick(db)
     return total

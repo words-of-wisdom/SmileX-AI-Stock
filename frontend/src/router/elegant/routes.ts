@@ -135,12 +135,30 @@ export const generatedRoutes: GeneratedRoute[] = [
         }
       },
       {
+        name: 'ai_market-analysis',
+        path: '/ai/market-analysis',
+        component: 'view.ai_market-analysis',
+        meta: {
+          title: 'ai_market-analysis',
+          i18nKey: 'route.ai_market-analysis'
+        }
+      },
+      {
         name: 'ai_model',
         path: '/ai/model',
         component: 'view.ai_model',
         meta: {
           title: 'ai_model',
           i18nKey: 'route.ai_model'
+        }
+      },
+      {
+        name: 'ai_sector-analysis',
+        path: '/ai/sector-analysis',
+        component: 'view.ai_sector-analysis',
+        meta: {
+          title: 'ai_sector-analysis',
+          i18nKey: 'route.ai_sector-analysis'
         }
       }
     ]

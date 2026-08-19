@@ -1,0 +1,557 @@
+<script setup lang="tsx">
+/**
+ * AI 分析报告面板（大盘/板块分析页共用）
+ * - 生成分析按钮（analysis:run 权限）：提交后异步生成，自动轮询最新记录
+ * - 分析策略按钮（analysis:strategy 权限）：策略提示词 + 明日研判开关，放在历史记录旁编辑
+ * - 报告展示：结构化摘要徽章（情绪/温度 或 轮动总结/热门板块）+ 明日研判 + markdown 正文
+ * - 历史记录抽屉：分页列表，点击回看指定记录
+ */
+import { computed, onBeforeUnmount, ref } from 'vue';
+import {
+  NButton,
+  NCard,
+  NDataTable,
+  NDescriptions,
+  NDescriptionsItem,
+  NDrawer,
+  NDrawerContent,
+  NEmpty,
+  NForm,
+  NFormItem,
+  NInput,
+  NPagination,
+  NProgress,
+  NSpace,
+  NSwitch,
+  NTag,
+  NText
+} from 'naive-ui';
+import type { DataTableColumns } from 'naive-ui';
+import dayjs from 'dayjs';
+import MarkdownIt from 'markdown-it';
+import {
+  fetchGetAnalysisConfig,
+  fetchGetAnalysisRunDetail,
+  fetchGetAnalysisRuns,
+  fetchGetLatestAnalysis,
+  fetchRunAnalysis,
+  fetchUpdateAnalysisConfig
+} from '@/service/api';
+import { useAuth } from '@/hooks/business/auth';
+import { $t } from '@/locales';
+
+defineOptions({ name: 'AnalysisReportPanel' });
+
+const props = defineProps<{
+  analysisType: Api.Analysis.AnalysisType;
+}>();
+
+const { hasAuth } = useAuth();
+const canRun = hasAuth('analysis:run');
+const canEditStrategy = hasAuth('analysis:strategy');
+
+const md = new MarkdownIt({ breaks: true, linkify: true, html: false });
+
+// ==================== 最新报告与轮询 ====================
+const latest = ref<Api.Analysis.AnalysisRunDetail | null>(null);
+const current = ref<Api.Analysis.AnalysisRunDetail | null>(null);
+const submitting = ref(false);
+/** 当前展示的是否为历史记录（非最新一条） */
+const viewingHistoryId = ref<number | null>(null);
+
+let pollTimer: ReturnType<typeof setTimeout> | null = null;
+
+function stopPoll() {
+  if (pollTimer) {
+    clearTimeout(pollTimer);
+    pollTimer = null;
+  }
+}
+
+function schedulePoll() {
+  stopPoll();
+  pollTimer = setTimeout(async () => {
+    await loadLatest(true);
+    if (latest.value?.status === 'running') schedulePoll();
+  }, 5000);
+}
+
+async function loadLatest(silent = false) {
+  const { data, error } = await fetchGetLatestAnalysis(props.analysisType);
+  if (!error) {
+    latest.value = data;
+    // 正在看最新记录（非历史回看）时同步刷新展示
+    if (viewingHistoryId.value === null) current.value = data;
+    if (data?.status === 'running') schedulePoll();
+  }
+}
+
+async function onGenerate() {
+  submitting.value = true;
+  try {
+    const { error } = await fetchRunAnalysis(props.analysisType);
+    if (!error) {
+      window.$message?.success($t('page.aiAnalysis.runSubmitted'));
+      viewingHistoryId.value = null;
+      await loadLatest(true);
+    }
+  } finally {
+    submitting.value = false;
+  }
+}
+
+// ==================== 历史记录 ====================
+const historyVisible = ref(false);
+const historyList = ref<Api.Analysis.AnalysisRunItem[]>([]);
+const historyTotal = ref(0);
+const historyPage = ref(1);
+const historyLoading = ref(false);
+
+async function loadHistory() {
+  historyLoading.value = true;
+  try {
+    const { data, error } = await fetchGetAnalysisRuns(props.analysisType, {
+      page: historyPage.value,
+      page_size: 20
+    });
+    if (!error) {
+      historyList.value = data?.records ?? [];
+      historyTotal.value = data?.total ?? 0;
+    }
+  } finally {
+    historyLoading.value = false;
+  }
+}
+
+function openHistory() {
+  historyVisible.value = true;
+  loadHistory();
+}
+
+function onHistoryPageChange(page: number) {
+  historyPage.value = page;
+  loadHistory();
+}
+
+async function viewHistoryRow(row: Api.Analysis.AnalysisRunItem) {
+  const { data, error } = await fetchGetAnalysisRunDetail(row.id);
+  if (!error && data) {
+    current.value = data;
+    viewingHistoryId.value = row.id;
+    historyVisible.value = false;
+  }
+}
+
+function backToLatest() {
+  viewingHistoryId.value = null;
+  current.value = latest.value;
+}
+
+// ==================== 分析策略配置 ====================
+const strategyVisible = ref(false);
+const strategyForm = ref<Api.Analysis.AnalysisConfigSaveParams>({
+  prompt_template: '',
+  include_tomorrow: true
+});
+const strategyLoading = ref(false);
+const strategySaving = ref(false);
+
+async function openStrategy() {
+  strategyVisible.value = true;
+  strategyLoading.value = true;
+  try {
+    const { data, error } = await fetchGetAnalysisConfig(props.analysisType);
+    if (!error) {
+      strategyForm.value = {
+        prompt_template: data?.prompt_template ?? '',
+        include_tomorrow: data?.include_tomorrow ?? true
+      };
+    }
+  } finally {
+    strategyLoading.value = false;
+  }
+}
+
+async function saveStrategy() {
+  strategySaving.value = true;
+  try {
+    const { error } = await fetchUpdateAnalysisConfig(props.analysisType, {
+      prompt_template: strategyForm.value.prompt_template?.trim() || null,
+      include_tomorrow: strategyForm.value.include_tomorrow
+    });
+    if (!error) {
+      window.$message?.success($t('page.aiAnalysis.strategySaved'));
+      strategyVisible.value = false;
+    }
+  } finally {
+    strategySaving.value = false;
+  }
+}
+
+const TRIGGER_LABEL: Record<string, string> = {
+  schedule: $t('page.aiAnalysis.triggerSchedule'),
+  manual: $t('page.aiAnalysis.triggerManual')
+};
+
+function statusTag(status: string) {
+  if (status === 'running') {
+    return (
+      <NTag type="info" size="small" bordered={false}>
+        {$t('page.aiAnalysis.statusRunning')}
+      </NTag>
+    );
+  }
+  return status === 'success' ? (
+    <NTag type="success" size="small" bordered={false}>
+      {$t('page.aiAnalysis.statusSuccess')}
+    </NTag>
+  ) : (
+    <NTag type="error" size="small" bordered={false}>
+      {$t('page.aiAnalysis.statusFailed')}
+    </NTag>
+  );
+}
+
+function summaryText(row: Api.Analysis.AnalysisRunItem | Api.Analysis.AnalysisRunDetail | null) {
+  if (!row?.parsed_result) return '-';
+  const parsed = row.parsed_result as Record<string, unknown>;
+  return String(parsed.summary ?? parsed.rotation_summary ?? '-');
+}
+
+const historyColumns = computed<DataTableColumns<Api.Analysis.AnalysisRunItem>>(() => [
+  {
+    key: 'created_at',
+    title: $t('page.aiAnalysis.execTime'),
+    width: 150,
+    render: row => <span class="text-12px">{row.created_at ? dayjs(row.created_at).format('YYYY-MM-DD HH:mm') : '-'}</span>
+  },
+  {
+    key: 'trigger_type',
+    title: $t('page.aiAnalysis.triggerCol'),
+    width: 80,
+    render: row => (
+      <NTag size="small" bordered={false}>
+        {TRIGGER_LABEL[row.trigger_type] ?? row.trigger_type}
+      </NTag>
+    )
+  },
+  {
+    key: 'status',
+    title: $t('page.aiAnalysis.statusCol'),
+    width: 80,
+    render: row => statusTag(row.status)
+  },
+  {
+    key: 'summary',
+    title: $t('page.aiAnalysis.summaryCol'),
+    minWidth: 180,
+    ellipsis: { tooltip: true },
+    render: row => <span class="text-12px">{summaryText(row)}</span>
+  },
+  {
+    key: 'actions',
+    title: $t('common.action'),
+    width: 70,
+    align: 'center',
+    render: row => (
+      <NButton size="tiny" tertiary onClick={() => viewHistoryRow(row)}>
+        {$t('page.aiAnalysis.viewBtn')}
+      </NButton>
+    )
+  }
+]);
+
+// ==================== 报告展示 ====================
+const marketParsed = computed(() => {
+  if (props.analysisType !== 'market' || !current.value?.parsed_result) return null;
+  return current.value.parsed_result as Api.Analysis.MarketParsedResult;
+});
+
+const sectorParsed = computed(() => {
+  if (props.analysisType !== 'sector' || !current.value?.parsed_result) return null;
+  return current.value.parsed_result as Api.Analysis.SectorParsedResult;
+});
+
+const keyPoints = computed(() => {
+  const parsed = current.value?.parsed_result as { key_points?: string[] } | null | undefined;
+  return parsed?.key_points ?? [];
+});
+
+/** 明日研判（market/sector 摘要共用字段，未开启或未输出时为空） */
+const tomorrowOutlook = computed(() => {
+  const parsed = current.value?.parsed_result as Api.Analysis.MarketParsedResult | undefined;
+  return parsed?.tomorrow_outlook ?? null;
+});
+
+function tomorrowType(direction?: string): 'error' | 'success' | 'warning' {
+  if (!direction) return 'warning';
+  if (/看涨|偏多|延续|上涨/.test(direction)) return 'error';
+  if (/看跌|偏空|退潮|下跌/.test(direction)) return 'success';
+  return 'warning';
+}
+
+const renderedMarkdown = computed(() => {
+  const raw = current.value?.ai_raw_response ?? '';
+  // 报告正文：去掉开头的 ```json 摘要代码块后渲染
+  const stripped = raw.replace(/```json\s*\{[\s\S]*?\}\s*```/, '').trim();
+  return md.render(stripped);
+});
+
+function sentimentType(sentiment?: string): 'error' | 'success' | 'warning' {
+  if (sentiment?.includes('看多')) return 'error';
+  if (sentiment?.includes('看空')) return 'success';
+  return 'warning';
+}
+
+function pctColor(val: number | null | undefined) {
+  if (val === null || val === undefined) return '#8c8c8c';
+  return val > 0 ? '#f5222d' : val < 0 ? '#52c41a' : '#8c8c8c';
+}
+
+function scoreColor(score?: number) {
+  if (score === undefined) return '#8c8c8c';
+  if (score >= 70) return '#f5222d';
+  if (score >= 40) return '#faad14';
+  return '#52c41a';
+}
+
+loadLatest();
+onBeforeUnmount(stopPoll);
+</script>
+
+<template>
+  <NCard :bordered="false" size="small" class="card-wrapper">
+    <template #header>
+      <div class="flex-y-center gap-8px">
+        <span class="text-16px font-500">{{ $t('page.aiAnalysis.reportTitle') }}</span>
+        <NTag v-if="current" size="small" :bordered="false">
+          {{ current.created_at ? current.created_at.substring(0, 10) : '' }}
+        </NTag>
+        <NTag v-if="current && current.status === 'success'" size="small" :bordered="false">
+          {{ TRIGGER_LABEL[current.trigger_type] ?? current.trigger_type }}
+        </NTag>
+      </div>
+    </template>
+    <template #header-extra>
+      <NSpace align="center" :size="8">
+        <NButton v-if="viewingHistoryId !== null" size="small" tertiary @click="backToLatest">
+          {{ $t('page.aiAnalysis.backToLatest') }}
+        </NButton>
+        <NButton size="small" tertiary @click="openHistory">
+          <template #icon><icon-mdi-history class="text-icon" /></template>
+          {{ $t('page.aiAnalysis.historyBtn') }}
+        </NButton>
+        <NButton v-if="canEditStrategy" size="small" tertiary @click="openStrategy">
+          <template #icon><icon-mdi-tune-vertical class="text-icon" /></template>
+          {{ $t('page.aiAnalysis.strategyBtn') }}
+        </NButton>
+        <NButton
+          v-if="canRun"
+          size="small"
+          type="primary"
+          :loading="submitting || current?.status === 'running'"
+          :disabled="current?.status === 'running'"
+          @click="onGenerate"
+        >
+          <template #icon><icon-mdi-auto-fix class="text-icon" /></template>
+          {{ current?.status === 'running' ? $t('page.aiAnalysis.statusRunning') : $t('page.aiAnalysis.generate') }}
+        </NButton>
+      </NSpace>
+    </template>
+
+    <!-- 生成中 -->
+    <div v-if="current?.status === 'running'" class="flex-col items-center gap-12px py-48px">
+      <icon-mdi-robot-excited class="text-48px" style="color: var(--primary-color)" />
+      <NText depth="3">{{ $t('page.aiAnalysis.generatingTip') }}</NText>
+    </div>
+
+    <!-- 失败 -->
+    <div v-else-if="current?.status === 'failed'" class="py-24px">
+      <NEmpty :description="$t('page.aiAnalysis.failedTip')">
+        <template #icon><icon-mdi-alert-circle-outline class="text-48px" style="color: #e0a240" /></template>
+        <template #extra>
+          <NText type="error" class="text-12px">{{ current.error_msg }}</NText>
+        </template>
+      </NEmpty>
+    </div>
+
+    <!-- 成功报告 -->
+    <template v-else-if="current?.status === 'success' && current.ai_raw_response">
+      <!-- 结构化摘要 -->
+      <NDescriptions v-if="marketParsed" label-placement="left" :column="3" size="small" bordered class="mb-12px">
+        <NDescriptionsItem :label="$t('page.aiAnalysis.sentimentLabel')">
+          <NTag :type="sentimentType(marketParsed.sentiment)" size="small">
+            {{ marketParsed.sentiment ?? '-' }}
+          </NTag>
+        </NDescriptionsItem>
+        <NDescriptionsItem :label="$t('page.aiAnalysis.scoreLabel')">
+          <NSpace align="center" :size="8">
+            <NProgress
+              type="circle"
+              :percentage="marketParsed.score ?? 0"
+              :color="scoreColor(marketParsed.score)"
+              :stroke-width="6"
+              :show-indicator="false"
+              style="width: 18px"
+            />
+            <span :style="{ color: scoreColor(marketParsed.score), fontWeight: '600' }">
+              {{ marketParsed.score ?? '-' }}
+            </span>
+          </NSpace>
+        </NDescriptionsItem>
+        <NDescriptionsItem :label="$t('page.aiAnalysis.summaryLabel')" :span="1">
+          {{ marketParsed.summary ?? '-' }}
+        </NDescriptionsItem>
+      </NDescriptions>
+      <NDescriptions
+        v-if="sectorParsed"
+        label-placement="left"
+        :column="1"
+        size="small"
+        bordered
+        class="mb-12px"
+      >
+        <NDescriptionsItem :label="$t('page.aiAnalysis.rotationLabel')">
+          {{ sectorParsed.rotation_summary ?? '-' }}
+        </NDescriptionsItem>
+        <NDescriptionsItem v-if="sectorParsed.hot_boards?.length" :label="$t('page.aiAnalysis.hotBoardsLabel')">
+          <NSpace :size="6" wrap>
+            <NTag
+              v-for="(board, idx) in sectorParsed.hot_boards"
+              :key="idx"
+              size="small"
+              :bordered="false"
+              type="info"
+            >
+              {{ board.board_name }}
+              <span v-if="board.change_pct !== null && board.change_pct !== undefined" :style="{ color: pctColor(board.change_pct) }">
+                {{ board.change_pct! > 0 ? '+' : '' }}{{ board.change_pct!.toFixed(2) }}%
+              </span>
+            </NTag>
+          </NSpace>
+        </NDescriptionsItem>
+      </NDescriptions>
+
+      <!-- 明日研判 -->
+      <div v-if="tomorrowOutlook" class="mb-12px flex items-center gap-8px rounded-6px border border-primary-200 px-12px py-8px dark:border-primary-800">
+        <NText class="shrink-0 text-13px font-500">{{ $t('page.aiAnalysis.tomorrowLabel') }}</NText>
+        <NTag size="small" :type="tomorrowType(tomorrowOutlook.direction)" :bordered="false">
+          {{ tomorrowOutlook.direction || '-' }}
+        </NTag>
+        <NText class="text-13px" depth="2">{{ tomorrowOutlook.summary || '' }}</NText>
+      </div>
+
+      <!-- 核心观察 -->
+      <div v-if="keyPoints.length" class="mb-12px">
+        <NText class="mb-4px block text-13px font-500">{{ $t('page.aiAnalysis.keyPointsLabel') }}</NText>
+        <ul class="m-0 pl-20px">
+          <li v-for="(point, idx) in keyPoints" :key="idx" class="text-13px leading-22px">
+            {{ point }}
+          </li>
+        </ul>
+      </div>
+
+      <!-- markdown 报告正文 -->
+      <div class="analysis-markdown text-13px" v-html="renderedMarkdown" />
+      <div class="mt-8px flex justify-end">
+        <NText depth="3" class="text-12px">
+          {{ $t('page.aiAnalysis.execTime') }}:
+          {{ current.created_at ? current.created_at.replace('T', ' ').substring(0, 16) : '-' }}
+        </NText>
+      </div>
+    </template>
+
+    <!-- 无记录 -->
+    <NEmpty v-else class="py-48px" :description="$t('page.aiAnalysis.emptyTip')" />
+
+    <!-- 分析策略配置抽屉 -->
+    <NDrawer v-model:show="strategyVisible" :width="480">
+      <NDrawerContent :title="$t('page.aiAnalysis.strategyTitle')" closable :native-scrollbar="false">
+        <NForm label-placement="top" :show-feedback="false">
+          <NFormItem :label="$t('page.aiAnalysis.includeTomorrow')">
+            <NSpace align="center" :size="12">
+              <NSwitch v-model:value="strategyForm.include_tomorrow" />
+              <NText depth="3" class="text-12px">{{ $t('page.aiAnalysis.includeTomorrowTip') }}</NText>
+            </NSpace>
+          </NFormItem>
+          <NFormItem class="mt-16px" :label="$t('page.aiAnalysis.strategyPromptLabel')">
+            <NInput
+              v-model:value="strategyForm.prompt_template"
+              type="textarea"
+              :rows="8"
+              :loading="strategyLoading"
+              :placeholder="$t('page.aiAnalysis.strategyPromptPlaceholder')"
+            />
+          </NFormItem>
+        </NForm>
+        <NText depth="3" class="text-12px">
+          {{ $t('page.aiAnalysis.strategyEffectTip') }}
+        </NText>
+        <template #footer>
+          <NButton type="primary" :loading="strategySaving" @click="saveStrategy">
+            {{ $t('page.aiAnalysis.saveBtn') }}
+          </NButton>
+        </template>
+      </NDrawerContent>
+    </NDrawer>
+
+    <!-- 历史记录抽屉 -->
+    <NDrawer v-model:show="historyVisible" :width="620">
+      <NDrawerContent :title="$t('page.aiAnalysis.historyTitle')" closable :native-scrollbar="false">
+        <NDataTable
+          :columns="historyColumns"
+          :data="historyList"
+          size="small"
+          :loading="historyLoading"
+          :row-key="(row: Api.Analysis.AnalysisRunItem) => row.id"
+          :flex-height="false"
+        />
+        <div class="mt-12px flex justify-end">
+          <NPagination
+            :page="historyPage"
+            :page-size="20"
+            :item-count="historyTotal"
+            @update:page="onHistoryPageChange"
+          />
+        </div>
+      </NDrawerContent>
+    </NDrawer>
+  </NCard>
+</template>
+
+<style scoped>
+.analysis-markdown :deep(h2) {
+  margin: 14px 0 8px;
+  font-size: 15px;
+  font-weight: 600;
+}
+.analysis-markdown :deep(h3) {
+  margin: 10px 0 6px;
+  font-size: 14px;
+  font-weight: 600;
+}
+.analysis-markdown :deep(p) {
+  margin: 6px 0;
+  line-height: 22px;
+}
+.analysis-markdown :deep(ul),
+.analysis-markdown :deep(ol) {
+  margin: 6px 0;
+  padding-left: 20px;
+}
+.analysis-markdown :deep(li) {
+  line-height: 22px;
+}
+.analysis-markdown :deep(strong) {
+  font-weight: 600;
+}
+.analysis-markdown :deep(table) {
+  border-collapse: collapse;
+  margin: 8px 0;
+}
+.analysis-markdown :deep(th),
+.analysis-markdown :deep(td) {
+  border: 1px solid rgba(128, 128, 128, 0.3);
+  padding: 4px 10px;
+}
+</style>
