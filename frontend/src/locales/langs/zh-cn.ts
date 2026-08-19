@@ -1497,6 +1497,9 @@ const local: App.I18n.Schema = {
       includeTomorrow: '明日研判',
       includeTomorrowTip: '开启后报告将包含对明日走势/板块轮动的预判章节',
       strategyEffectTip: '保存后下次生成分析时生效；已生成的历史报告不受影响',
+      tomorrowPromptLabel: '明日研判提示词',
+      tomorrowPromptPlaceholder:
+        '定制明日研判的方法论与侧重点，留空使用内置专业框架（多空证据清单+三情景概率推演+作废条件）。如：以量价关系为最高权重证据，加入隔夜外盘与富时A50联动参考…',
       saveBtn: '保存',
       strategySaved: '策略已保存，下次生成分析时生效',
       market: {

@@ -39,6 +39,7 @@ declare namespace Api {
       analysis_type: AnalysisType | string;
       prompt_template: string | null;
       include_tomorrow: boolean;
+      tomorrow_prompt_template: string | null;
       updated_at: string | null;
     }
 
@@ -46,6 +47,7 @@ declare namespace Api {
     export interface AnalysisConfigSaveParams {
       prompt_template?: string | null;
       include_tomorrow: boolean;
+      tomorrow_prompt_template?: string | null;
     }
 
     /** 分析执行记录（列表项） */

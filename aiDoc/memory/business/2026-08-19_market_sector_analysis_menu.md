@@ -13,6 +13,12 @@
 - 关闭明日研判时 executor 会丢弃 LLM 可能误输出的 tomorrow_outlook 字段
 - 坑：update_config 在裸 AsyncSession（expire_on_commit=True）下 commit 后 `model_validate(ORM)` 触发 MissingGreenlet，改为直接从请求构造响应规避
 
+**2026-08-19 二次追加（迁移 0023）**：明日研判也支持定制提示词：
+- `business_analysis_config` 新增 `tomorrow_prompt_template` 列（include_tomorrow 开启时注入 user prompt「明日研判策略要求」段，优先级高于默认框架；空则用内置专业框架）
+- 内置研判框架升级为专业方法论：多空证据清单（禁止单边叙事）+ 三情景概率推演（触发条件→概率合计100%→应对）+ 作废条件（可证伪信号）；开启研判时报告长度上限放宽至 1200 字；JSON 的 tomorrow_outlook.summary 须包含核心依据与可验证确认信号
+- 前端抽屉加「明日研判提示词」输入框（仅研判开关开启时显示，保存时关闭研判则该字段清空）
+- 高水准策略已通过 `backend/scripts/seed_analysis_strategy.py`（幂等）写入 market/sector 两类型配置：主策略（卖方策略分析师/买方轮动研究员角色定位 + 证据分级 + 分析纪律）+ 明日策略（定位先行/阶段定位 + 三情景概率推演 + 作废条件）
+
 ## 状态
 
 已完成

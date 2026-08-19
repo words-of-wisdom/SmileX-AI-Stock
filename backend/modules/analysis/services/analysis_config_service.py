@@ -54,12 +54,14 @@ class AnalysisConfigService:
                 analysis_type=analysis_type,
                 prompt_template=req.prompt_template,
                 include_tomorrow=req.include_tomorrow,
+                tomorrow_prompt_template=req.tomorrow_prompt_template,
             )
             db.add(config)
             logger.info("新建分析策略配置: type=%s", analysis_type)
         else:
             config.prompt_template = req.prompt_template
             config.include_tomorrow = req.include_tomorrow
+            config.tomorrow_prompt_template = req.tomorrow_prompt_template
             config.updated_at = timezone.now()
         await db.commit()
         # 直接从请求构造响应，避免 commit 后 ORM 属性过期引发的惰性刷新问题
@@ -67,4 +69,5 @@ class AnalysisConfigService:
             analysis_type=analysis_type,
             prompt_template=req.prompt_template,
             include_tomorrow=req.include_tomorrow,
+            tomorrow_prompt_template=req.tomorrow_prompt_template,
         )

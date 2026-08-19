@@ -1626,6 +1626,8 @@ declare namespace App {
         includeTomorrow: string;
         includeTomorrowTip: string;
         strategyEffectTip: string;
+        tomorrowPromptLabel: string;
+        tomorrowPromptPlaceholder: string;
         saveBtn: string;
         strategySaved: string;
         market: {

@@ -151,7 +151,8 @@ function backToLatest() {
 const strategyVisible = ref(false);
 const strategyForm = ref<Api.Analysis.AnalysisConfigSaveParams>({
   prompt_template: '',
-  include_tomorrow: true
+  include_tomorrow: true,
+  tomorrow_prompt_template: ''
 });
 const strategyLoading = ref(false);
 const strategySaving = ref(false);
@@ -164,7 +165,8 @@ async function openStrategy() {
     if (!error) {
       strategyForm.value = {
         prompt_template: data?.prompt_template ?? '',
-        include_tomorrow: data?.include_tomorrow ?? true
+        include_tomorrow: data?.include_tomorrow ?? true,
+        tomorrow_prompt_template: data?.tomorrow_prompt_template ?? ''
       };
     }
   } finally {
@@ -177,7 +179,10 @@ async function saveStrategy() {
   try {
     const { error } = await fetchUpdateAnalysisConfig(props.analysisType, {
       prompt_template: strategyForm.value.prompt_template?.trim() || null,
-      include_tomorrow: strategyForm.value.include_tomorrow
+      include_tomorrow: strategyForm.value.include_tomorrow,
+      tomorrow_prompt_template: strategyForm.value.include_tomorrow
+        ? strategyForm.value.tomorrow_prompt_template?.trim() || null
+        : null
     });
     if (!error) {
       window.$message?.success($t('page.aiAnalysis.strategySaved'));
@@ -478,9 +483,18 @@ onBeforeUnmount(stopPoll);
             <NInput
               v-model:value="strategyForm.prompt_template"
               type="textarea"
-              :rows="8"
+              :rows="6"
               :loading="strategyLoading"
               :placeholder="$t('page.aiAnalysis.strategyPromptPlaceholder')"
+            />
+          </NFormItem>
+          <NFormItem v-if="strategyForm.include_tomorrow" class="mt-16px" :label="$t('page.aiAnalysis.tomorrowPromptLabel')">
+            <NInput
+              v-model:value="strategyForm.tomorrow_prompt_template"
+              type="textarea"
+              :rows="6"
+              :loading="strategyLoading"
+              :placeholder="$t('page.aiAnalysis.tomorrowPromptPlaceholder')"
             />
           </NFormItem>
         </NForm>

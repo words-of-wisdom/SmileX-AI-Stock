@@ -1504,6 +1504,9 @@ const local: App.I18n.Schema = {
       includeTomorrow: 'Tomorrow Outlook',
       includeTomorrowTip: 'Include a next-day outlook section in the report',
       strategyEffectTip: 'Takes effect on the next generation; existing reports are unaffected',
+      tomorrowPromptLabel: 'Tomorrow Outlook Prompt',
+      tomorrowPromptPlaceholder:
+        'Customize the outlook methodology; leave empty for the built-in framework (evidence list + 3-scenario probability + invalidation conditions). E.g. weight price-volume highest, add overnight markets reference…',
       saveBtn: 'Save',
       strategySaved: 'Strategy saved, effective on the next generation',
       market: {

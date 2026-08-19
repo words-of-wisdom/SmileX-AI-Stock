@@ -60,6 +60,7 @@ class AnalysisConfigItem(BaseModel):
     analysis_type: str
     prompt_template: Optional[str] = None
     include_tomorrow: bool = True
+    tomorrow_prompt_template: Optional[str] = None
     updated_at: Optional[datetime] = None
 
 
@@ -71,3 +72,7 @@ class AnalysisConfigUpdateRequest(BaseModel):
         description="分析策略定制提示词（关注面/风格/风控偏好等，空则使用默认策略）",
     )
     include_tomorrow: bool = Field(True, description="是否包含明日研判章节")
+    tomorrow_prompt_template: Optional[str] = Field(
+        None, max_length=2000,
+        description="明日研判定制提示词（方法论与侧重点，空则使用内置专业研判框架）",
+    )

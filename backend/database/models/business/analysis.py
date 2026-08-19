@@ -71,3 +71,7 @@ class BusinessAnalysisConfig(Base):
     include_tomorrow: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=True, comment="是否包含明日研判章节"
     )
+    tomorrow_prompt_template: Mapped[Optional[str]] = mapped_column(
+        Text, nullable=True, default=None,
+        comment="明日研判定制提示词（方法论与侧重点，空则使用内置专业研判框架）",
+    )
