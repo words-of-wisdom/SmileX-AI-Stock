@@ -44,6 +44,7 @@ defineOptions({ name: 'AnalysisReportPanel' });
 
 const props = defineProps<{
   analysisType: Api.Analysis.AnalysisType;
+  session?: Api.Analysis.SessionType;
 }>();
 
 const { hasAuth } = useAuth();
@@ -77,7 +78,7 @@ function schedulePoll() {
 }
 
 async function loadLatest(silent = false) {
-  const { data, error } = await fetchGetLatestAnalysis(props.analysisType);
+  const { data, error } = await fetchGetLatestAnalysis(props.analysisType, props.session);
   if (!error) {
     latest.value = data;
     // 正在看最新记录（非历史回看）时同步刷新展示
@@ -89,7 +90,7 @@ async function loadLatest(silent = false) {
 async function onGenerate() {
   submitting.value = true;
   try {
-    const { error } = await fetchRunAnalysis(props.analysisType);
+    const { error } = await fetchRunAnalysis(props.analysisType, props.session);
     if (!error) {
       window.$message?.success($t('page.aiAnalysis.runSubmitted'));
       viewingHistoryId.value = null;
@@ -110,10 +111,14 @@ const historyLoading = ref(false);
 async function loadHistory() {
   historyLoading.value = true;
   try {
-    const { data, error } = await fetchGetAnalysisRuns(props.analysisType, {
-      page: historyPage.value,
-      page_size: 20
-    });
+    const { data, error } = await fetchGetAnalysisRuns(
+      props.analysisType,
+      {
+        page: historyPage.value,
+        page_size: 20
+      },
+      props.session
+    );
     if (!error) {
       historyList.value = data?.records ?? [];
       historyTotal.value = data?.total ?? 0;
@@ -161,7 +166,7 @@ async function openStrategy() {
   strategyVisible.value = true;
   strategyLoading.value = true;
   try {
-    const { data, error } = await fetchGetAnalysisConfig(props.analysisType);
+    const { data, error } = await fetchGetAnalysisConfig(props.analysisType, props.session);
     if (!error) {
       strategyForm.value = {
         prompt_template: data?.prompt_template ?? '',
@@ -177,13 +182,17 @@ async function openStrategy() {
 async function saveStrategy() {
   strategySaving.value = true;
   try {
-    const { error } = await fetchUpdateAnalysisConfig(props.analysisType, {
-      prompt_template: strategyForm.value.prompt_template?.trim() || null,
-      include_tomorrow: strategyForm.value.include_tomorrow,
-      tomorrow_prompt_template: strategyForm.value.include_tomorrow
-        ? strategyForm.value.tomorrow_prompt_template?.trim() || null
-        : null
-    });
+    const { error } = await fetchUpdateAnalysisConfig(
+      props.analysisType,
+      {
+        prompt_template: strategyForm.value.prompt_template?.trim() || null,
+        include_tomorrow: strategyForm.value.include_tomorrow,
+        tomorrow_prompt_template: strategyForm.value.include_tomorrow
+          ? strategyForm.value.tomorrow_prompt_template?.trim() || null
+          : null
+      },
+      props.session
+    );
     if (!error) {
       window.$message?.success($t('page.aiAnalysis.strategySaved'));
       strategyVisible.value = false;
@@ -282,11 +291,43 @@ const keyPoints = computed(() => {
   return parsed?.key_points ?? [];
 });
 
-/** 明日研判（market/sector 摘要共用字段，未开启或未输出时为空） */
+/** 明日研判（market/sector 摘要共用字段，未开启或未输出时为空；早盘时段语义为「今日展望」） */
 const tomorrowOutlook = computed(() => {
   const parsed = current.value?.parsed_result as Api.Analysis.MarketParsedResult | undefined;
   return parsed?.tomorrow_outlook ?? null;
 });
+
+/** 研判标签按时段切换：收盘=明日研判，早盘=今日展望 */
+const outlookLabelKey = computed(() =>
+  props.session === 'morning' ? 'page.aiAnalysis.todayOutlookLabel' : 'page.aiAnalysis.tomorrowLabel'
+);
+
+/** 策略抽屉标题按时段区分 */
+const strategyTitleKey = computed(() =>
+  props.session === 'morning' ? 'page.aiAnalysis.morningStrategyTitle' : 'page.aiAnalysis.strategyTitle'
+);
+
+/** 策略抽屉内各文案按时段区分：收盘=复盘+明日预判，早盘=当日推演 */
+const isMorningSession = computed(() => props.session === 'morning');
+const outlookSwitchLabelKey = computed(() =>
+  isMorningSession.value ? 'page.aiAnalysis.includeTodayOutlook' : 'page.aiAnalysis.includeTomorrow'
+);
+const outlookSwitchTipKey = computed(() =>
+  isMorningSession.value ? 'page.aiAnalysis.includeTodayTip' : 'page.aiAnalysis.includeTomorrowTip'
+);
+const strategyPromptPlaceholderKey = computed(() =>
+  isMorningSession.value
+    ? 'page.aiAnalysis.morningPromptPlaceholder'
+    : 'page.aiAnalysis.strategyPromptPlaceholder'
+);
+const outlookPromptLabelKey = computed(() =>
+  isMorningSession.value ? 'page.aiAnalysis.todayPromptLabel' : 'page.aiAnalysis.tomorrowPromptLabel'
+);
+const outlookPromptPlaceholderKey = computed(() =>
+  isMorningSession.value
+    ? 'page.aiAnalysis.todayPromptPlaceholder'
+    : 'page.aiAnalysis.tomorrowPromptPlaceholder'
+);
 
 function tomorrowType(direction?: string): 'error' | 'success' | 'warning' {
   if (!direction) return 'warning';
@@ -325,7 +366,12 @@ onBeforeUnmount(stopPoll);
 </script>
 
 <template>
-  <NCard :bordered="false" size="small" class="card-wrapper">
+  <NCard
+    :bordered="false"
+    size="small"
+    class="card-wrapper min-h-0 flex flex-1 flex-col"
+    content-style="flex: 1 1 0%; overflow-y: auto;"
+  >
     <template #header>
       <div class="flex-y-center gap-8px">
         <span class="text-16px font-500">{{ $t('page.aiAnalysis.reportTitle') }}</span>
@@ -439,7 +485,7 @@ onBeforeUnmount(stopPoll);
 
       <!-- 明日研判 -->
       <div v-if="tomorrowOutlook" class="mb-12px flex items-center gap-8px rounded-6px border border-primary-200 px-12px py-8px dark:border-primary-800">
-        <NText class="shrink-0 text-13px font-500">{{ $t('page.aiAnalysis.tomorrowLabel') }}</NText>
+        <NText class="shrink-0 text-13px font-500">{{ $t(outlookLabelKey) }}</NText>
         <NTag size="small" :type="tomorrowType(tomorrowOutlook.direction)" :bordered="false">
           {{ tomorrowOutlook.direction || '-' }}
         </NTag>
@@ -471,12 +517,12 @@ onBeforeUnmount(stopPoll);
 
     <!-- 分析策略配置抽屉 -->
     <NDrawer v-model:show="strategyVisible" :width="480">
-      <NDrawerContent :title="$t('page.aiAnalysis.strategyTitle')" closable :native-scrollbar="false">
+      <NDrawerContent :title="$t(strategyTitleKey)" closable :native-scrollbar="false">
         <NForm label-placement="top" :show-feedback="false">
-          <NFormItem :label="$t('page.aiAnalysis.includeTomorrow')">
+          <NFormItem :label="$t(outlookSwitchLabelKey)">
             <NSpace align="center" :size="12">
               <NSwitch v-model:value="strategyForm.include_tomorrow" />
-              <NText depth="3" class="text-12px">{{ $t('page.aiAnalysis.includeTomorrowTip') }}</NText>
+              <NText depth="3" class="text-12px">{{ $t(outlookSwitchTipKey) }}</NText>
             </NSpace>
           </NFormItem>
           <NFormItem class="mt-16px" :label="$t('page.aiAnalysis.strategyPromptLabel')">
@@ -485,20 +531,23 @@ onBeforeUnmount(stopPoll);
               type="textarea"
               :rows="6"
               :loading="strategyLoading"
-              :placeholder="$t('page.aiAnalysis.strategyPromptPlaceholder')"
+              :placeholder="$t(strategyPromptPlaceholderKey)"
             />
           </NFormItem>
-          <NFormItem v-if="strategyForm.include_tomorrow" class="mt-16px" :label="$t('page.aiAnalysis.tomorrowPromptLabel')">
+          <NFormItem v-if="strategyForm.include_tomorrow" class="mt-16px" :label="$t(outlookPromptLabelKey)">
             <NInput
               v-model:value="strategyForm.tomorrow_prompt_template"
               type="textarea"
               :rows="6"
               :loading="strategyLoading"
-              :placeholder="$t('page.aiAnalysis.tomorrowPromptPlaceholder')"
+              :placeholder="$t(outlookPromptPlaceholderKey)"
             />
           </NFormItem>
         </NForm>
         <NText depth="3" class="text-12px">
+          {{ $t('page.aiAnalysis.newsInjectTip') }}
+        </NText>
+        <NText depth="3" class="mt-4px block text-12px">
           {{ $t('page.aiAnalysis.strategyEffectTip') }}
         </NText>
         <template #footer>

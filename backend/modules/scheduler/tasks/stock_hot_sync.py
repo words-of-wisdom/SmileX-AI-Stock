@@ -19,10 +19,12 @@ from modules.scheduler.core.registry import scheduled_task
 
 logger = logging.getLogger(__name__)
 
-# A 股连续竞价时段（本地时区，Asia/Shanghai）
+# A 股连续竞价时段（本地时区，Asia/Shanghai）；
+# 下午延到 15:05，让收盘后最后一轮同步（cron */5 会在 15:05 触发）
+# 拿到定型的收盘价/收盘榜单
 _TRADING_WINDOWS: tuple[tuple[dt_time, dt_time], ...] = (
     (dt_time(9, 30), dt_time(11, 30)),
-    (dt_time(13, 0), dt_time(15, 0)),
+    (dt_time(13, 0), dt_time(15, 5)),
 )
 
 

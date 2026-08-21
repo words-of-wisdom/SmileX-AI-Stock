@@ -18,6 +18,9 @@
 - 内置研判框架升级为专业方法论：多空证据清单（禁止单边叙事）+ 三情景概率推演（触发条件→概率合计100%→应对）+ 作废条件（可证伪信号）；开启研判时报告长度上限放宽至 1200 字；JSON 的 tomorrow_outlook.summary 须包含核心依据与可验证确认信号
 - 前端抽屉加「明日研判提示词」输入框（仅研判开关开启时显示，保存时关闭研判则该字段清空）
 - 高水准策略已通过 `backend/scripts/seed_analysis_strategy.py`（幂等）写入 market/sector 两类型配置：主策略（卖方策略分析师/买方轮动研究员角色定位 + 证据分级 + 分析纪律）+ 明日策略（定位先行/阶段定位 + 三情景概率推演 + 作废条件）
+- 页面布局改为左右两栏预览（可滚动）：根容器 `h-full flex gap-16px overflow-hidden lt-sm:flex-col lt-sm:overflow-auto`；左右卡片均为 `h-full flex flex-col` + `content-style="flex: 1 1 0%; overflow-y: auto;"` 实现头部固定、内容区独立滚动（NCard 用 content-style 滚动内容而非滚整卡）；大盘左栏 w-2/5（指数网格 cols 2/l:3）、板块左栏 w-1/2（表格 scroll-x 780 适配窄列），右栏报告面板 flex-1 min-w-0；lt-sm 回落上下堆叠（卡片 lt-sm:h-auto + 根 overflow-auto 整页滚动）
+- 金额单位统一：共用 `views/ai/utils.ts` 的 `fmtAmountCn`（≥1亿→X.XX亿；≥1千万→X.XX千万；≥1万→X.X万；负数按绝对值分级保留负号），替换两页面各自的 fmtMoney（此前阈值/精度不一致）
+- 大盘页增加同上一交易日比较：内容区顶部比较块——两市成交额环比（`fetchGetMarketDates` 取真实上一交易日→`fetchGetMarketIndices(prevDate)` 汇总昨日成交额，显示 `昨日→今日 + 放量/缩量+涨幅%` 标签，涨红跌绿）+ 主力净流入环比（资金流近5日倒数第二条，显示 `昨日→今日 + 增减额`）；无上一日数据时整块隐藏；指数卡片涨跌幅本身即相对昨收无需重复比较
 
 ## 状态
 
@@ -60,3 +63,5 @@
 ## 记录日期
 
 2026-08-19
+
+**2026-08-21 追加**：分析接入近24h重点资讯 + 新增早盘(9:20)分析时段，见 [2026-08-21 记录](./2026-08-21_analysis_session_news.md)。

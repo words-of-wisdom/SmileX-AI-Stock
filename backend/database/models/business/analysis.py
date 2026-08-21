@@ -21,7 +21,7 @@ class BusinessAnalysisRun(Base):
 
     __table_args__ = (
         Index("ix_analysis_run_type_created", "analysis_type", "created_at"),
-        Index("ix_analysis_run_type_date", "analysis_type", "run_date"),
+        Index("ix_analysis_run_type_date", "analysis_type", "run_date", "session"),
         {"comment": "AI 分析执行记录表"},
     )
 
@@ -31,6 +31,10 @@ class BusinessAnalysisRun(Base):
     )
     run_date: Mapped[str] = mapped_column(
         String(10), nullable=False, comment="执行日期 YYYY-MM-DD（定时任务同日去重用）"
+    )
+    session: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="close",
+        comment="分析时段：close-收盘分析（16:05），morning-早盘分析（9:20）",
     )
     trigger_type: Mapped[str] = mapped_column(
         String(20), nullable=False, default="schedule",
@@ -56,13 +60,17 @@ class BusinessAnalysisConfig(Base):
     """AI 分析策略配置表（大盘/板块每类型一条）"""
 
     __table_args__ = (
-        Index("ix_analysis_config_type", "analysis_type", unique=True),
+        Index("ix_analysis_config_type_session", "analysis_type", "session", unique=True),
         {"comment": "AI 分析策略配置表"},
     )
 
     analysis_type: Mapped[str] = mapped_column(
         String(20), nullable=False,
-        comment="分析类型：market-大盘分析，sector-板块分析（唯一）",
+        comment="分析类型：market-大盘分析，sector-板块分析（与 session 联合唯一）",
+    )
+    session: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="close",
+        comment="分析时段：close-收盘分析，morning-早盘分析",
     )
     prompt_template: Mapped[Optional[str]] = mapped_column(
         Text, nullable=True, default=None,

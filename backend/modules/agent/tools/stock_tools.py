@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
         "properties": {
             "source": {
                 "type": "string",
-                "description": "热榜来源，可选值：eastmoney（东方财富）、10jqka（同花顺）、xueqiu（雪球）。留空则返回所有来源的最新数据。",
+                "description": "热榜来源，可选值：em_rank（东方财富人气榜，热度列为排名反推的合成指数）、xq_follow（雪球关注榜）、xq_tweet（雪球讨论榜）、ths_hot（同花顺热榜）。留空则返回所有来源的最新数据。",
             },
             "limit": {
                 "type": "integer",

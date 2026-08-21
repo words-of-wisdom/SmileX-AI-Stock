@@ -9,6 +9,8 @@ import {
   NRadioButton,
   NRadioGroup,
   NSpace,
+  NTab,
+  NTabs,
   NTag,
   NText
 } from 'naive-ui';
@@ -16,6 +18,7 @@ import type { DataTableColumns } from 'naive-ui';
 import dayjs from 'dayjs';
 import { fetchGetBoardList } from '@/service/api';
 import { $t } from '@/locales';
+import { fmtAmountCn } from '../utils';
 import AnalysisReportPanel from '../components/analysis-report-panel.vue';
 
 defineOptions({ name: 'AiSectorAnalysis' });
@@ -31,6 +34,9 @@ const boardType = ref<Api.StockBoard.BoardType>('industry');
 const boards = ref<Api.StockBoard.BoardDailyItem[]>([]);
 const loading = ref(false);
 
+/** 分析时段：close-收盘分析（默认），morning-早盘分析（9:20 前瞻） */
+const session = ref<Api.Analysis.SessionType>('close');
+
 function pctColor(val: number | null) {
   if (val === null || val === undefined) return FLAT;
   return val > 0 ? UP : val < 0 ? DOWN : FLAT;
@@ -39,13 +45,6 @@ function pctColor(val: number | null) {
 function fmtPct(val: number | null) {
   if (val === null || val === undefined) return '-';
   return `${val > 0 ? '+' : ''}${val.toFixed(2)}%`;
-}
-
-function fmtMoney(val: number | null) {
-  if (val === null || val === undefined) return '-';
-  if (val >= 100000000) return `${(val / 100000000).toFixed(1)}亿`;
-  if (val >= 10000) return `${(val / 10000).toFixed(1)}万`;
-  return val.toFixed(0);
 }
 
 async function loadBoards() {
@@ -108,7 +107,7 @@ const boardColumns = computed<DataTableColumns<Api.StockBoard.BoardDailyItem>>((
     title: $t('page.aiAnalysis.sector.turnoverCol'),
     width: 100,
     align: 'right',
-    render: row => <span>{fmtMoney(row.turnover)}</span>
+    render: row => <span>{fmtAmountCn(row.turnover)}</span>
   },
   {
     key: 'net_inflow',
@@ -116,7 +115,7 @@ const boardColumns = computed<DataTableColumns<Api.StockBoard.BoardDailyItem>>((
     width: 110,
     align: 'right',
     render: row => (
-      <span style={{ color: pctColor(row.net_inflow) }}>{fmtMoney(row.net_inflow)}</span>
+      <span style={{ color: pctColor(row.net_inflow) }}>{fmtAmountCn(row.net_inflow)}</span>
     )
   },
   {
@@ -155,9 +154,14 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="min-h-500px flex-col-stretch gap-16px overflow-hidden lt-sm:overflow-auto">
-    <!-- 板块涨幅榜 -->
-    <NCard :bordered="false" size="small" class="card-wrapper">
+  <div class="min-h-500px h-full flex gap-16px overflow-hidden lt-sm:flex-col lt-sm:overflow-auto">
+    <!-- 左：板块涨幅榜（内容区独立滚动，头部固定） -->
+    <NCard
+      :bordered="false"
+      size="small"
+      class="card-wrapper h-full w-1/2 flex-shrink-0 flex flex-col lt-sm:h-auto lt-sm:w-full"
+      content-style="flex: 1 1 0%; overflow-y: auto;"
+    >
       <template #header>
         <div class="flex-y-center gap-8px">
           <span class="text-16px font-500">{{ $t('page.aiAnalysis.sector.boardTitle') }}</span>
@@ -165,7 +169,7 @@ onMounted(() => {
         </div>
       </template>
       <template #header-extra>
-        <NSpace align="center" :size="12">
+        <NSpace align="center" :size="12" wrap>
           <NText depth="3" class="text-12px">
             {{ $t('page.aiAnalysis.sector.topNTip', { n: TOP_N }) }}
           </NText>
@@ -181,12 +185,24 @@ onMounted(() => {
         :data="boards"
         size="small"
         :loading="loading"
+        :scroll-x="780"
         :row-key="(row: Api.StockBoard.BoardDailyItem) => row.id"
       />
     </NCard>
 
-    <!-- AI 板块轮动解读 -->
-    <AnalysisReportPanel analysis-type="sector" class="sm:flex-1-hidden" />
+    <!-- 右：AI 板块轮动解读（收盘/早盘时段切换；内容区独立滚动，生成/历史/策略按钮固定可见） -->
+    <div class="flex h-full min-w-0 flex-1 flex-col gap-8px lt-sm:h-auto lt-sm:flex-none">
+      <NTabs v-model:value="session" type="line" size="small">
+        <NTab name="close">{{ $t('page.aiAnalysis.sessionClose') }}</NTab>
+        <NTab name="morning">{{ $t('page.aiAnalysis.sessionMorning') }}</NTab>
+      </NTabs>
+      <AnalysisReportPanel
+        :key="session"
+        analysis-type="sector"
+        :session="session"
+        class="min-w-0 flex-1 lt-sm:h-auto lt-sm:flex-none"
+      />
+    </div>
   </div>
 </template>
 

@@ -47,6 +47,58 @@ def _normalize_code(raw) -> str:
     return s[:20]
 
 
+def _to_sina_code(pure_code: str) -> str:
+    """纯数字代码 → 新浪行情代码（按首位推断交易所，与前端 openStockPage 口径一致）
+
+    6 开头 → sh（沪市主板/科创板），4/8 开头 → bj（北交所），其余 → sz（深市主板/创业板）。
+    """
+    c = str(pure_code)
+    if c.startswith("6"):
+        return f"sh{c}"
+    if c.startswith(("4", "8")):
+        return f"bj{c}"
+    return f"sz{c}"
+
+
+async def _fill_quotes(client: httpx.AsyncClient, items: list[dict]) -> list[dict]:
+    """新浪批量行情补全：只填充 items 中为空的字段，不覆盖源站原值。
+
+    各榜单源返回的字段不齐：雪球两榜无涨跌幅、同花顺无最新价、
+    东财报价补充失败时只剩排名。这里统一用新浪 hq 批量行情补齐
+    stock_name / latest_price / change_pct 的空缺；失败仅告警不阻断。
+    """
+    from modules.stock.services._sina import fetch_spot_quotes
+
+    need_codes = [
+        it["stock_code"] for it in items
+        if it.get("latest_price") is None or it.get("change_pct") is None
+        or not it.get("stock_name") or it["stock_name"] == it["stock_code"]
+    ]
+    if not need_codes:
+        return items
+
+    quotes: dict[str, dict] = {}
+    try:
+        quotes = await fetch_spot_quotes(
+            [_to_sina_code(c) for c in need_codes], client=client
+        )
+    except Exception as e:
+        logger.warning("热榜行情补全失败，保留源站原始字段: %s", e)
+        return items
+
+    for it in items:
+        q = quotes.get(_to_sina_code(it["stock_code"])) or {}
+        if not q:
+            continue
+        if not it.get("stock_name") or it["stock_name"] == it["stock_code"]:
+            it["stock_name"] = str(q.get("name") or it["stock_name"])[:50]
+        if it.get("latest_price") is None:
+            it["latest_price"] = q.get("latest_price")
+        if it.get("change_pct") is None:
+            it["change_pct"] = q.get("change_pct")
+    return items
+
+
 def _item(stock_code, stock_name, rank, latest_price=None, change_pct=None, hot_value=None) -> dict:
     """构造标准化热榜 dict"""
     if not stock_code or not stock_name:
@@ -67,12 +119,11 @@ def _item(stock_code, stock_name, rank, latest_price=None, change_pct=None, hot_
 async def _fetch_em_rank(client: httpx.AsyncClient) -> list[dict]:
     """东方财富个股人气榜
 
-    akshare 的 stock_hot_rank_em 取完排名后需调用东财 push2 行情接口补价格，
-    push2 被限流/不可达时整体失败；这里拆成两步：emappdata 接口拿排名，
-    新浪 hq 批量行情补名称/最新价/涨跌幅。
+    emappdata 的 getAllCurrentList 只返回 代码(sc)/排名(rk)/排名变化(rc,hisRc)，
+    无行情也无热度值：
+    - 名称/最新价/涨跌幅经 _fill_quotes 由新浪批量行情补全；
+    - 热度用 101-排名 的合成指数填充（非源站原始数据），保证热度列可展示。
     """
-    from modules.stock.services._sina import fetch_spot_quotes
-
     resp = await client.post(
         "https://emappdata.eastmoney.com/stockrank/getAllCurrentList",
         json={
@@ -89,27 +140,18 @@ async def _fetch_em_rank(client: httpx.AsyncClient) -> list[dict]:
     if not rows:
         raise RuntimeError("东财人气榜返回空数据")
 
-    # 报价补充失败不阻断：保留排名，名称退化为代码
-    quotes: dict[str, dict] = {}
-    try:
-        quotes = await fetch_spot_quotes(
-            [str(r["sc"]).lower() for r in rows if r.get("sc")], client=client
-        )
-    except Exception as e:
-        logger.warning("东财人气榜报价补充失败，仅保留排名: %s", e)
-
     items = []
     for row in rows:
         sc = str(row.get("sc", "")).strip()
-        q = quotes.get(sc.lower()) or {}
+        rank = row.get("rk")
         items.append(_item(
             stock_code=sc,
-            stock_name=q.get("name") or sc,
-            rank=row.get("rk"),
-            latest_price=q.get("latest_price"),
-            change_pct=q.get("change_pct"),
+            stock_name=_normalize_code(sc),  # 占位为纯数字代码，_fill_quotes 识别后替换为新浪名称
+            rank=rank,
+            hot_value=(101 - int(rank)) if rank is not None else None,
         ))
-    return [it for it in items if it]
+    items = [it for it in items if it]
+    return await _fill_quotes(client, items)
 
 
 # ================================================================
@@ -120,6 +162,8 @@ async def _fetch_xq(client: httpx.AsyncClient, func_name: str) -> list[dict]:
 
     雪球代码带 SH/SZ 前缀，由 _normalize_code 统一剥离为纯数字；
     akshare 返回的是全量股票（5000+），这里截断为热榜 Top 100。
+    akshare 只返回 代码/简称/关注/最新价 四列，无涨跌幅，
+    由 _fill_quotes 经新浪行情补齐。
     """
     import akshare as ak
 
@@ -136,7 +180,7 @@ async def _fetch_xq(client: httpx.AsyncClient, func_name: str) -> list[dict]:
             latest_price=row.get("最新价"),
             hot_value=row.get("关注"),
         ))
-    return items
+    return await _fill_quotes(client, [it for it in items if it])
 
 
 def _make_xq_fetcher(func_name: str):
@@ -151,7 +195,8 @@ def _make_xq_fetcher(func_name: str):
 async def _fetch_ths_hot(client: httpx.AsyncClient) -> list[dict]:
     """同花顺热门股人气榜
 
-    通过同花顺"富贵" hot_list 接口获取沪深 A 股热度排行（返回 JSON）。
+    通过同花顺"富贵" hot_list 接口获取沪深 A 股热度排行（返回 JSON），
+    接口无最新价字段，由 _fill_quotes 经新浪行情补齐；
     失败时抛异常，由 StockHotService.sync_all 捕获并记录 sync_log。
     """
     headers = {
@@ -188,7 +233,7 @@ async def _fetch_ths_hot(client: httpx.AsyncClient) -> list[dict]:
 
     if not items:
         raise RuntimeError("同花顺热榜返回空数据")
-    return items
+    return await _fill_quotes(client, items)
 
 
 # ================================================================

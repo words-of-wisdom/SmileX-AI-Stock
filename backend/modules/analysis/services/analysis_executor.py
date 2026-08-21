@@ -11,10 +11,15 @@ AI 分析执行器 —— 大盘/板块分析（复用 agent 模块模型解析�
 2. LLM 分析在后台 asyncio 任务中进行（独立 session）
 3. 数据直接取自库内日快照（指数/资金流/涨停统计/板块排行 + 近期趋势），不走 ReAct 工具循环，
    单轮生成更快更可控
+4. 近24小时资讯以独立段注入；资讯为外部抓取内容，可能命中 LLM 输入内容审核
+   （如 MiniMax 敏感词 422 拒绝整单），首次调用失败时摘除资讯段降级重试一次
 
-分析策略可配置（business_analysis_config，每类型一条）：
+分析策略可配置（business_analysis_config，每「类型×时段」一条）：
 - prompt_template：分析侧重点/风格等定制要求，注入 user prompt
-- include_tomorrow：报告是否包含明日研判章节（默认开启）
+- include_tomorrow：报告是否包含研判章节（收盘=明日研判，早盘=今日展望，默认开启）
+
+时段维度（session）：close-收盘分析（16:05，当日数据复盘），morning-早盘分析（9:20，
+昨日收盘数据 + 近24小时资讯，侧重隔夜消息面对今日开盘的影响）。
 """
 import asyncio
 import json
@@ -48,6 +53,10 @@ _MARKET_TREND_DAYS = 10
 _SECTOR_TREND_DAYS = 3
 _SECTOR_TREND_TOP_N = 5
 
+# 资讯注入：近 N 小时重点资讯条数（news.sync_all 每 5 分钟同步一次）
+_NEWS_HOURS = 24
+_NEWS_LIMIT = 30
+
 # 后台任务强引用集合（防止 asyncio.Task 被 GC），完成后自动移除
 _BACKGROUND_TASKS: set[asyncio.Task] = set()
 
@@ -75,6 +84,7 @@ _MARKET_SYSTEM_PROMPT = """你是 SmileX-AI-Stock 平台的 AI 大盘分析师�
 ```
 2. 再输出完整的 markdown 分析报告，结构建议：
    ## 市场概览（各指数表现点评）
+   ## 消息面复盘（当日重要资讯与盘面的印证/背离，资讯与走势背离时必须点出并解释）
    ## 资金面分析（主力资金动向解读）
    ## 情绪面（涨停/连板/赚钱效应）
    ## 后市展望（机会与风险提示）
@@ -109,6 +119,7 @@ _SECTOR_SYSTEM_PROMPT = """你是 SmileX-AI-Stock 平台的 AI 板块分析师�
 2. 再输出完整的 markdown 分析报告，结构建议：
    ## 行业板块表现（领涨行业解读）
    ## 概念题材动向（热点题材梳理）
+   ## 消息面与板块印证（当日资讯利好/利空与板块表现的印证或背离，纯消息脉冲须标注）
    ## 资金主线（主力净流入方向与持续性判断）
    ## 轮动展望（后市关注方向）
 
@@ -140,22 +151,118 @@ _SECTOR_TOMORROW_SECTION = """
 禁止"建议关注"式空话；结论必须能被明日盘面证实或证伪。
 """
 
+# ------------------------------------------------------------------
+# 早盘分析（9:20，morning）系统提示词：数据 = 昨日收盘快照 + 近24小时资讯，
+# 侧重隔夜消息面对今日开盘的影响与今日观察要点
+# ------------------------------------------------------------------
+_MARKET_MORNING_SYSTEM_PROMPT = """你是 SmileX-AI-Stock 平台的 AI 大盘分析师，负责在早盘（9:20 竞价阶段）对今日A股市场进行开盘前瞻。
 
-def _build_system_prompt(analysis_type: str, include_tomorrow: bool) -> str:
-    """按分析类型与配置拼装系统提示词（明日研判章节按需追加）"""
+我会直接提供真实数据（昨日收盘指数快照与近期走势、近期资金流、昨日涨停情绪统计、近24小时重点财经资讯），禁止凭空编造数据，分析必须基于所给数据。
+
+输出要求（严格按以下顺序，两部分缺一不可）：
+1. 先输出一个 JSON 对象（包在 ```json 代码块中）：
+```json
+{
+  "sentiment": "看多",              // 今日开盘情绪预期：看多 / 中性 / 看空
+  "score": 65,                     // 今日市场温度预期 0-100（越高越强）
+  "summary": "一句话总评",          // 30 字以内
+  "key_points": ["要点1", "要点2"], // 3-5 条核心观察
+  "tomorrow_outlook": {            // 今日展望（未开启研判时省略该字段）
+    "direction": "震荡偏多",        // 今日方向：看涨 / 震荡偏多 / 震荡 / 震荡偏空 / 看跌
+    "summary": "一句话展望（40字内），须包含核心依据与一个可验证的确认信号"
+  }
+}
+```
+2. 再输出完整的 markdown 早盘前瞻报告，结构建议：
+   ## 隔夜要闻解读（重要资讯对市场的影响研判）
+   ## 昨日市场回顾（收盘数据简评）
+   ## 今日开盘展望（高开/低开/平开情景推演与竞价观察信号）
+   ## 今日关注要点（事件日历、量能与关键点位提示）
+
+报告使用中文，条理清晰，总长度控制在 800 字以内。不构成投资建议的免责声明无需输出。
+"""
+
+_SECTOR_MORNING_SYSTEM_PROMPT = """你是 SmileX-AI-Stock 平台的 AI 板块分析师，负责在早盘（9:20 竞价阶段）对今日A股行业与概念板块进行开盘前瞻。
+
+我会直接提供真实数据（昨日行业/概念板块涨幅榜、资金与领涨股、近几日轮动对比、近24小时重点财经资讯），禁止凭空编造数据，分析必须基于所给数据。
+
+输出要求（严格按以下顺序，两部分缺一不可）：
+1. 先输出一个 JSON 对象（包在 ```json 代码块中）：
+```json
+{
+  "rotation_summary": "一句话今日主线预期", // 30 字以内
+  "hot_boards": [                        // 今日最值得关注的 3-5 个板块
+    {
+      "board_name": "半导体",
+      "board_type": "industry",           // industry-行业 / concept-概念
+      "change_pct": 3.21,                // 昨日涨跌幅(%)
+      "viewpoint": "今日关注理由，40 字以内"
+    }
+  ],
+  "key_points": ["要点1", "要点2"],       // 3-5 条核心观察
+  "tomorrow_outlook": {                  // 今日展望（未开启研判时省略该字段）
+    "direction": "轮动延续",              // 今日轮动方向：轮动延续 / 高低切换 / 热点退潮 / 新主线酝酿
+    "summary": "一句话展望（40字内），须包含核心依据与一个可验证的确认信号"
+  }
+}
+```
+2. 再输出完整的 markdown 早盘前瞻报告，结构建议：
+   ## 隔夜要闻与板块映射（资讯利好/利空哪些板块）
+   ## 昨日板块轮动回顾（收盘榜单简评）
+   ## 今日主线推演（延续/切换情景与竞价确认信号）
+   ## 今日关注要点（可接力方向与需回避的高位方向）
+
+报告使用中文，条理清晰，总长度控制在 800 字以内。不构成投资建议的免责声明无需输出。
+"""
+
+# 早盘"今日展望"章节内置框架（morning + include_tomorrow 时追加，对应收盘版的明日研判框架）
+_MARKET_MORNING_SECTION = """
+## 今日展望（必须包含，按专业研判框架输出）
+1. **消息面证据清单**：隔夜资讯中偏多、偏空证据各 2-3 条，必须引用所给资讯与昨日数据，不允许只讲单边叙事
+2. **开盘情景推演**：高开/平开/低开三个情景，每个情景写明：
+   - 触发条件：竞价阶段可观察的确认信号（集合竞价量能、涨跌停家数、外盘与期指表现、关键指数点位）
+   - 概率倾向：主观概率（如 40%/35%/25%），三情景合计必须为 100%
+   - 应对建议：仓位与风格取向
+3. **作废条件**：明确写出 1-2 个使本展望失效的可观察信号（如竞价放量急变、盘中突发政策消息等，用数据可得的事实表述）
+禁止"建议密切关注"式空话；每个结论必须能被今日盘面证实或证伪。
+"""
+
+_SECTOR_MORNING_SECTION = """
+## 今日主线推演（必须包含，按专业研判框架输出）
+1. **主线阶段定位**：结合昨日涨幅榜与近几日轮动对比（榜单延续率、新面孔占比、领涨股溢价）判断当前主线处于 发酵/高潮/分歧/退潮 哪一阶段
+2. **消息面映射**：逐条评估隔夜资讯利好/利空哪些昨日主线板块，区分"有消息催化的延续"与"纯情绪脉冲"
+3. **情景推演**：轮动延续/高低切换/热点退潮三个情景，每个写明：
+   - 触发条件：竞价阶段可观察的确认信号（板块竞价涨幅、龙头竞价溢价、涨跌停家数）
+   - 概率倾向：主观概率（三情景合计 100%）
+   - 应对建议：可接力方向与需回避的高位方向
+4. **作废条件**：明确写出使本推演失效的可观察信号（如龙头竞价大幅低开、板块竞价集体低撤单）
+禁止"建议关注"式空话；结论必须能被今日盘面证实或证伪。
+"""
+
+
+def _build_system_prompt(analysis_type: str, session: str, include_tomorrow: bool) -> str:
+    """按分析类型/时段与配置拼装系统提示词（研判章节按需追加）"""
     if analysis_type == "market":
-        prompt = _MARKET_SYSTEM_PROMPT
-        section = _MARKET_TOMORROW_SECTION
+        if session == "morning":
+            prompt, section = _MARKET_MORNING_SYSTEM_PROMPT, _MARKET_MORNING_SECTION
+        else:
+            prompt, section = _MARKET_SYSTEM_PROMPT, _MARKET_TOMORROW_SECTION
     else:
-        prompt = _SECTOR_SYSTEM_PROMPT
-        section = _SECTOR_TOMORROW_SECTION
+        if session == "morning":
+            prompt, section = _SECTOR_MORNING_SYSTEM_PROMPT, _SECTOR_MORNING_SECTION
+        else:
+            prompt, section = _SECTOR_SYSTEM_PROMPT, _SECTOR_TOMORROW_SECTION
+    section_title = "今日展望" if session == "morning" else "明日研判"
     if include_tomorrow:
         prompt += (
-            "\n因当前开启了「明日研判」，报告结构中追加以下章节（放在最后，"
+            f"\n因当前开启了「{section_title}」，报告结构中追加以下章节（放在最后，"
             "此时报告总长度可放宽至 1200 字以内）：\n" + section
         )
     else:
-        prompt += "\n当前未开启「明日研判」，报告中不要出现对明日走势的专门预判章节，JSON 中也不要输出 tomorrow_outlook 字段。\n"
+        prompt += (
+            f"\n当前未开启「{section_title}」，报告中不要出现对{'今日' if session == 'morning' else '明日'}走势的专门预判章节，"
+            "JSON 中也不要输出 tomorrow_outlook 字段。\n"
+        )
     return prompt
 
 
@@ -191,6 +298,42 @@ def _dump_rows(items: list, fields: list[str]) -> list[dict]:
     return rows
 
 
+async def _collect_recent_news(db: AsyncSession) -> str:
+    """近24小时重点资讯收集：发布时间倒序取前 N 条（标题｜源｜摘要），
+    无资讯时返回空串（不阻塞分析）"""
+    from datetime import timedelta
+
+    from database.models.business.news import BusinessNews
+
+    since = timezone.now() - timedelta(hours=_NEWS_HOURS)
+    result = await db.execute(
+        select(BusinessNews)
+        .where(
+            BusinessNews.published_at >= since,
+            BusinessNews.deleted_at.is_(None),
+        )
+        .order_by(BusinessNews.published_at.desc())
+        .limit(_NEWS_LIMIT)
+    )
+    rows = result.scalars().all()
+    if not rows:
+        return ""
+    lines = []
+    for n in rows:
+        ts = n.published_at.strftime("%m-%d %H:%M") if n.published_at else ""
+        line = f"[{ts}] {n.title}（{n.source_name}）"
+        if n.summary:
+            summary = n.summary.strip()
+            if summary and summary != n.title:
+                line += f"：{summary[:80]}"
+        lines.append(line)
+    return (
+        f"近 {_NEWS_HOURS} 小时重点财经资讯（共 {len(lines)} 条，先按影响力分级"
+        "（宏观政策/央行动向 > 行业产业政策 > 个股与突发事件），"
+        "相似资讯合并解读、与市场关联弱的忽略，评估影响时必须引用原文）：\n" + "\n".join(lines)
+    )
+
+
 async def _collect_market_data(db: AsyncSession) -> str:
     """大盘分析数据收集：指数快照 + 上证近期走势 + 近几日资金流 + 涨停情绪"""
     from modules.stock.services.market_service import MarketService
@@ -210,7 +353,7 @@ async def _collect_market_data(db: AsyncSession) -> str:
 
     if indices:
         parts.append(
-            "当日大盘指数快照：\n"
+            "最新收盘大盘指数快照：\n"
             + json.dumps(
                 _dump_rows(
                     indices,
@@ -220,7 +363,7 @@ async def _collect_market_data(db: AsyncSession) -> str:
             )
         )
     else:
-        parts.append("当日大盘指数快照：暂无数据（可能尚未同步，请基于其他数据分析并在报告中注明）")
+        parts.append("最新收盘大盘指数快照：暂无数据（可能尚未同步，请基于其他数据分析并在报告中注明）")
 
     if trend:
         parts.append(
@@ -251,8 +394,9 @@ async def _collect_market_data(db: AsyncSession) -> str:
         if stats_raw.get(k) not in (None, {}, 0)
     }
     if stats_fields:
-        parts.append(f"当日涨停情绪统计：\n{json.dumps(stats_fields, ensure_ascii=False)}")
+        parts.append(f"最新涨停情绪统计：\n{json.dumps(stats_fields, ensure_ascii=False)}")
 
+    # 资讯段由 _analyze 单独注入（LLM 内容审核失败时可整体摘除降级重试）
     parts.append("请基于以上真实数据输出 JSON 摘要与 markdown 大盘分析报告。")
     return "\n\n".join(parts)
 
@@ -278,12 +422,12 @@ async def _collect_sector_data(db: AsyncSession) -> str:
         if boards:
             top = _dump_rows(boards[:_SECTOR_TOP_N], fields)
             parts.append(
-                f"当日{label}板块涨幅榜 TOP{len(top)}（change_pct-涨跌幅%，turnover-成交额，"
+                f"最新收盘{label}板块涨幅榜 TOP{len(top)}（change_pct-涨跌幅%，turnover-成交额，"
                 f"net_inflow-主力净流入，rising/falling_count-板块内涨跌家数）：\n"
                 + json.dumps(top, ensure_ascii=False)
             )
         else:
-            parts.append(f"当日{label}板块数据：暂无数据（可能尚未同步，请基于其他数据分析并在报告中注明）")
+            parts.append(f"最新收盘{label}板块数据：暂无数据（可能尚未同步，请基于其他数据分析并在报告中注明）")
 
     # 近几日行业涨幅榜对比（支撑轮动延续性/明日研判）
     try:
@@ -309,6 +453,7 @@ async def _collect_sector_data(db: AsyncSession) -> str:
     except Exception:
         logger.warning("行业板块近期对比获取失败（不影响分析）", exc_info=True)
 
+    # 资讯段由 _analyze 单独注入（LLM 内容审核失败时可整体摘除降级重试）
     parts.append("请基于以上真实数据输出 JSON 摘要与 markdown 板块轮动分析报告。")
     return "\n\n".join(parts)
 
@@ -361,15 +506,17 @@ class AnalysisExecutor:
         db: AsyncSession,
         analysis_type: str,
         trigger_type: str = "schedule",
+        session: str = "close",
     ) -> int:
         """提交一次分析：创建 running 状态执行记录并立即返回 run_id，
         LLM 分析在后台 asyncio 任务中进行（独立 session，只传 id 不传 ORM 实例）。
 
-        并发守卫：同类型已存在 running 记录时抛 ANALYSIS_ALREADY_RUNNING。
+        并发守卫：同类型同时段已存在 running 记录时抛 ANALYSIS_ALREADY_RUNNING。
         """
         dup = await db.execute(
             select(BusinessAnalysisRun.id).where(
                 BusinessAnalysisRun.analysis_type == analysis_type,
+                BusinessAnalysisRun.session == session,
                 BusinessAnalysisRun.status == "running",
                 BusinessAnalysisRun.deleted_at.is_(None),
             ).limit(1)
@@ -383,6 +530,7 @@ class AnalysisExecutor:
         now = timezone.now()
         run = BusinessAnalysisRun(
             analysis_type=analysis_type,
+            session=session,
             run_date=now.strftime("%Y-%m-%d"),
             trigger_type=trigger_type,
             status="running",
@@ -391,13 +539,13 @@ class AnalysisExecutor:
         await db.commit()  # expire_on_commit=False，flush 后 run.id 可直接取用
 
         task = asyncio.create_task(
-            AnalysisExecutor._execute_analysis(run.id, analysis_type)
+            AnalysisExecutor._execute_analysis(run.id, analysis_type, session)
         )
         _BACKGROUND_TASKS.add(task)
         task.add_done_callback(_BACKGROUND_TASKS.discard)
         logger.info(
-            "已提交 AI 分析: type=%s run_id=%s trigger=%s",
-            analysis_type, run.id, trigger_type,
+            "已提交 AI 分析: type=%s session=%s run_id=%s trigger=%s",
+            analysis_type, session, run.id, trigger_type,
         )
         return run.id
 
@@ -405,14 +553,14 @@ class AnalysisExecutor:
     # 后台分析
     # ------------------------------------------------------------------
     @staticmethod
-    async def _execute_analysis(run_id: int, analysis_type: str) -> None:
+    async def _execute_analysis(run_id: int, analysis_type: str, session: str = "close") -> None:
         """后台分析入口：独立 session + 整体超时兜底，任何异常都回写 Run 失败状态"""
         from database.db_manager import get_session
 
         async for db in get_session():
             try:
                 await asyncio.wait_for(
-                    AnalysisExecutor._analyze(db, run_id, analysis_type),
+                    AnalysisExecutor._analyze(db, run_id, analysis_type, session),
                     timeout=ANALYSIS_TIMEOUT,
                 )
             except Exception as exc:  # noqa: BLE001  含 TimeoutError
@@ -435,7 +583,7 @@ class AnalysisExecutor:
                     logger.exception("回写失败分析记录异常: run_id=%s", run_id)
 
     @staticmethod
-    async def _analyze(db: AsyncSession, run_id: int, analysis_type: str) -> None:
+    async def _analyze(db: AsyncSession, run_id: int, analysis_type: str, session: str = "close") -> None:
         """分析主体：读取策略配置 -> 收集库内数据 -> LLM 生成报告 -> 解析 JSON 摘要 -> 回写成功"""
         from modules.analysis.services.analysis_config_service import AnalysisConfigService
 
@@ -451,7 +599,7 @@ class AnalysisExecutor:
             return
 
         # 1. 读取分析策略配置（无记录按默认：无定制提示词、明日研判开启）
-        config = await AnalysisConfigService.get_effective(db, analysis_type)
+        config = await AnalysisConfigService.get_effective(db, analysis_type, session)
 
         # 2. 收集数据（部分数据源失败不阻塞，prompt 中会注明缺失）
         if analysis_type == "market":
@@ -459,14 +607,50 @@ class AnalysisExecutor:
         else:
             data_prompt = await _collect_sector_data(db)
 
-        # 3. LLM 生成（系统提示词按明日研判开关动态拼装）
-        system_prompt = _build_system_prompt(analysis_type, config.include_tomorrow)
-        user_prompt = _build_user_prompt(analysis_type, data_prompt, config)
-        raw_text = await _run_llm(db, analysis_type, system_prompt, user_prompt)
+        # 近24小时资讯单独收集：外部内容不可控（可能命中 LLM 内容审核导致整单失败），
+        # 拼装为独立段，LLM 调用失败时可整体摘除降级重试；获取失败不阻塞
+        news_prompt = ""
+        try:
+            news_prompt = await _collect_recent_news(db)
+        except Exception:
+            logger.warning("近期资讯获取失败（不影响分析）", exc_info=True)
+
+        # 3. LLM 生成（系统提示词按时段/研判开关动态拼装）；
+        #    资讯段放最前（行情数据 prompt 以"请基于以上真实数据输出…"收尾）
+        system_prompt = _build_system_prompt(analysis_type, session, config.include_tomorrow)
+
+        def _compose_user_prompt(with_news: bool) -> str:
+            if not with_news and news_prompt:
+                body = (
+                    "（注：近24小时资讯因故未注入，消息面数据缺失，请在报告中注明）\n\n"
+                    + data_prompt
+                )
+            elif news_prompt:
+                body = news_prompt + "\n\n" + data_prompt
+            else:
+                body = data_prompt
+            return _build_user_prompt(analysis_type, body, config)
+
+        try:
+            raw_text = await _run_llm(
+                db, analysis_type, system_prompt, _compose_user_prompt(True),
+            )
+        except Exception:
+            if not news_prompt:
+                raise
+            # 资讯为外部抓取内容，可能命中 LLM 输入内容审核（如 MiniMax 敏感词 422）
+            # 导致整单失败；摘除资讯段降级重试一次，保证基于行情数据的报告仍能生成
+            logger.warning(
+                "LLM 调用失败，摘除资讯段降级重试: run_id=%s type=%s session=%s",
+                run_id, analysis_type, session, exc_info=True,
+            )
+            raw_text = await _run_llm(
+                db, analysis_type, system_prompt, _compose_user_prompt(False),
+            )
         run.ai_raw_response = raw_text[:20000]
 
         # 4. 解析 JSON 摘要（失败不影响报告本身，仅摘要为空；
-        #    关闭明日研判时丢弃 LLM 可能误输出的 tomorrow_outlook）
+        #    关闭研判时丢弃 LLM 可能误输出的 tomorrow_outlook）
         parsed = _extract_json_object(raw_text)
         if parsed is not None and not config.include_tomorrow:
             parsed.pop("tomorrow_outlook", None)
@@ -475,6 +659,6 @@ class AnalysisExecutor:
         run.status = "success"
         await db.commit()
         logger.info(
-            "AI 分析完成: type=%s run_id=%s parsed=%s tomorrow=%s",
-            analysis_type, run_id, parsed is not None, config.include_tomorrow,
+            "AI 分析完成: type=%s session=%s run_id=%s parsed=%s tomorrow=%s",
+            analysis_type, session, run_id, parsed is not None, config.include_tomorrow,
         )

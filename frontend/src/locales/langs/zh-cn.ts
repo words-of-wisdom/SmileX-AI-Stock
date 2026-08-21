@@ -1489,6 +1489,10 @@ const local: App.I18n.Schema = {
       hotBoardsLabel: '关注板块',
       keyPointsLabel: '核心观察',
       tomorrowLabel: '明日研判',
+      todayOutlookLabel: '今日展望',
+      sessionClose: '收盘分析',
+      sessionMorning: '早盘分析',
+      morningStrategyTitle: '早盘分析策略配置',
       strategyBtn: '分析策略',
       strategyTitle: '分析策略配置',
       strategyPromptLabel: '策略提示词',
@@ -1496,6 +1500,15 @@ const local: App.I18n.Schema = {
         '定制分析侧重点与风格，留空使用默认策略。如：重点关注量能变化与主力资金延续性，风格偏谨慎，回避情绪化表述，多结合近几日趋势给出右侧确认信号…',
       includeTomorrow: '明日研判',
       includeTomorrowTip: '开启后报告将包含对明日走势/板块轮动的预判章节',
+      includeTodayOutlook: '今日展望',
+      includeTodayTip: '开启后早盘报告将包含对今日开盘与走势的推演章节（隔夜资讯映射 + 竞价确认信号）',
+      todayPromptLabel: '今日展望提示词',
+      todayPromptPlaceholder:
+        '定制今日展望的方法论与侧重点，留空使用内置框架（消息面证据清单+开盘三情景概率推演+作废条件）。如：以隔夜外盘与富时A50为首要参考，重点评估政策类资讯的开盘定价…',
+      morningPromptPlaceholder:
+        '定制早盘分析侧重点与风格，留空使用默认策略。如：重点解读隔夜政策与外盘对今日开盘的影响，消息-板块映射给出影响时效（竞价脉冲/半日/全天），风格偏谨慎…',
+      newsInjectTip:
+        '资讯结合：生成时自动注入近24小时重点财经资讯（前30条，按影响力分级）；策略中可约定资讯的筛选侧重、影响力分级与消息-板块映射要求',
       strategyEffectTip: '保存后下次生成分析时生效；已生成的历史报告不受影响',
       tomorrowPromptLabel: '明日研判提示词',
       tomorrowPromptPlaceholder:
@@ -1506,7 +1519,10 @@ const local: App.I18n.Schema = {
         indicesTitle: '指数快照',
         totalTurnover: '两市成交额',
         mainInflowLabel: '主力净流入',
-        turnover: '成交额'
+        turnover: '成交额',
+        compareLabel: '较上一交易日',
+        volumeUp: '放量',
+        volumeDown: '缩量'
       },
       sector: {
         boardTitle: '板块涨幅榜',

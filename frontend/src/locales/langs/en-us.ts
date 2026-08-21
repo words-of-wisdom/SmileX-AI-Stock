@@ -1496,6 +1496,10 @@ const local: App.I18n.Schema = {
       hotBoardsLabel: 'Focus Boards',
       keyPointsLabel: 'Key Points',
       tomorrowLabel: 'Tomorrow',
+      todayOutlookLabel: 'Today Outlook',
+      sessionClose: 'Close Analysis',
+      sessionMorning: 'Pre-Market Analysis',
+      morningStrategyTitle: 'Pre-Market Strategy',
       strategyBtn: 'Strategy',
       strategyTitle: 'Analysis Strategy',
       strategyPromptLabel: 'Strategy Prompt',
@@ -1503,6 +1507,15 @@ const local: App.I18n.Schema = {
         'Customize analysis focus and style; leave empty for the default strategy. E.g. focus on volume and fund-flow persistence, cautious tone, favor right-side confirmation signals…',
       includeTomorrow: 'Tomorrow Outlook',
       includeTomorrowTip: 'Include a next-day outlook section in the report',
+      includeTodayOutlook: 'Today Outlook',
+      includeTodayTip: 'Pre-market report includes a today outlook section (overnight news mapping + auction confirmation signals)',
+      todayPromptLabel: 'Today Outlook Prompt',
+      todayPromptPlaceholder:
+        'Customize the today outlook methodology; leave empty for the built-in framework (news evidence list + opening 3-scenario probability + invalidation conditions)',
+      morningPromptPlaceholder:
+        'Customize pre-market analysis focus and style; leave empty for the default strategy. E.g. focus on overnight policy and global markets impact on today open, with news-to-sector mapping and impact duration…',
+      newsInjectTip:
+        'News integration: top 30 headlines from the last 24h are injected automatically (graded by impact); the strategy prompt can define news filtering focus, impact grading and news-to-sector mapping',
       strategyEffectTip: 'Takes effect on the next generation; existing reports are unaffected',
       tomorrowPromptLabel: 'Tomorrow Outlook Prompt',
       tomorrowPromptPlaceholder:
@@ -1513,7 +1526,10 @@ const local: App.I18n.Schema = {
         indicesTitle: 'Index Snapshot',
         totalTurnover: 'Total Turnover',
         mainInflowLabel: 'Main Net Inflow',
-        turnover: 'Turnover'
+        turnover: 'Turnover',
+        compareLabel: 'vs Previous Trading Day',
+        volumeUp: 'Expanding',
+        volumeDown: 'Shrinking'
       },
       sector: {
         boardTitle: 'Board Top Gainers',

@@ -35,9 +35,10 @@ class StockHotService:
     # ------------------------------------------------------------------
     @staticmethod
     async def sync_all(db: AsyncSession) -> dict:
-        """抓取所有热榜源并写入当日快照。
+        """抓取所有热榜源并滚动更新当日快照。
 
-        返回汇总：{fetched, saved, failed_sources}
+        同日多次同步会覆盖已有行的排名/价格/热度并移除掉榜个股，
+        当日快照始终是最新时点；返回汇总：{fetched, saved, failed_sources}
         """
         fetched_total = 0
         saved_total = 0
@@ -90,12 +91,32 @@ class StockHotService:
                                 ),
                             )
                         )
+                        # 滚动更新：同日多次同步覆盖已有行的排名/价格/热度，
+                        # 让当日快照始终是最新时点（"排名变化"仍对比上一交易日）；
+                        # 随后删除本次已掉榜的行，保持榜单就是最新 Top N
                         stmt = insert(BusinessStockHotRank).values(rows)
-                        stmt = stmt.on_conflict_do_nothing(
-                            index_elements=["record_date", "source", "stock_code"]
+                        stmt = stmt.on_conflict_do_update(
+                            index_elements=["record_date", "source", "stock_code"],
+                            set_={
+                                "rank": stmt.excluded.rank,
+                                "stock_name": stmt.excluded.stock_name,
+                                "latest_price": stmt.excluded.latest_price,
+                                "change_pct": stmt.excluded.change_pct,
+                                "hot_value": stmt.excluded.hot_value,
+                                "updated_at": timezone.now(),
+                            },
                         )
                         result = await db.execute(stmt)
                         saved_count = result.rowcount or 0
+
+                        current_codes = [r["stock_code"] for r in rows]
+                        await db.execute(
+                            delete(BusinessStockHotRank).where(
+                                BusinessStockHotRank.record_date == today,
+                                BusinessStockHotRank.source == key,
+                                BusinessStockHotRank.stock_code.not_in(current_codes),
+                            )
+                        )
 
                     fetched_total += fetched_count
                     saved_total += saved_count

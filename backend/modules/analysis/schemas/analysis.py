@@ -17,10 +17,23 @@ ANALYSIS_TYPE_NAMES = {
     "sector": "板块分析",
 }
 
+# 分析时段常量（close-收盘分析 16:05，morning-早盘分析 9:20）
+SESSION_TYPES = ("close", "morning")
+
+SESSION_TYPE_NAMES = {
+    "close": "收盘分析",
+    "morning": "早盘分析",
+}
+
 # query 参数解析：空串/非法值一律归为 None（不回退默认值，避免筛选静默吞记录）
 AnalysisTypeQuery = Annotated[
     Optional[str],
     BeforeValidator(lambda v: v if v in ANALYSIS_TYPES else None),
+]
+
+AnalysisSessionQuery = Annotated[
+    Optional[str],
+    BeforeValidator(lambda v: v if v in SESSION_TYPES else None),
 ]
 
 
@@ -31,6 +44,7 @@ class AnalysisRunItem(BaseModel):
 
     id: int
     analysis_type: str
+    session: str = "close"  # close-收盘分析，morning-早盘分析
     run_date: str
     trigger_type: str
     status: str  # running-执行中，success-成功，failed-失败
@@ -58,6 +72,7 @@ class AnalysisConfigItem(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     analysis_type: str
+    session: str = "close"
     prompt_template: Optional[str] = None
     include_tomorrow: bool = True
     tomorrow_prompt_template: Optional[str] = None

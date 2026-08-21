@@ -3,6 +3,9 @@ declare namespace Api {
     /** 分析类型 */
     export type AnalysisType = 'market' | 'sector';
 
+    /** 分析时段：close-收盘分析（16:05），morning-早盘分析（9:20） */
+    export type SessionType = 'close' | 'morning';
+
     /** 明日研判（parsed_result.tomorrow_outlook） */
     export interface TomorrowOutlook {
       direction?: string;
@@ -37,6 +40,7 @@ declare namespace Api {
     /** 分析策略配置（无记录时后端返回默认值，data 始终非空） */
     export interface AnalysisConfig {
       analysis_type: AnalysisType | string;
+      session: SessionType | string;
       prompt_template: string | null;
       include_tomorrow: boolean;
       tomorrow_prompt_template: string | null;
@@ -54,6 +58,7 @@ declare namespace Api {
     export interface AnalysisRunItem {
       id: number;
       analysis_type: AnalysisType | string;
+      session: SessionType | string;
       run_date: string;
       trigger_type: 'schedule' | 'manual';
       status: 'running' | 'success' | 'failed';

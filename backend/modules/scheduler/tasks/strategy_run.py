@@ -97,7 +97,7 @@ async def strategy_run_execute():
 
 
 @scheduled_task(
-    cron="* * * * * 9-15 * * mon-fri",
+    cron="* 9-15 * * mon-fri",
     name="AI策略模拟交易引擎",
     description="交易日内每分钟拉取策略股票实时行情：按实时价执行待执行买卖信号（模拟买卖）+ 刷新持仓价格浮盈 + 止损/止盈/目标价自动平仓",
     task_key="strategy.trade_engine",

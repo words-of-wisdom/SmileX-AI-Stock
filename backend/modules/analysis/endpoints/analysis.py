@@ -22,6 +22,8 @@ from modules.analysis.services.analysis_config_service import AnalysisConfigServ
 from modules.analysis.schemas.analysis import (
     ANALYSIS_TYPES,
     ANALYSIS_TYPE_NAMES,
+    SESSION_TYPES,
+    SESSION_TYPE_NAMES,
     AnalysisConfigItem,
     AnalysisConfigUpdateRequest,
     AnalysisRunDetailItem,
@@ -44,6 +46,16 @@ def _validate_analysis_type(analysis_type: str) -> str:
     return analysis_type
 
 
+def _validate_session(session: str) -> str:
+    """校验分析时段：close-收盘分析（默认），morning-早盘分析"""
+    if session not in SESSION_TYPES:
+        raise CustomError(
+            error=CustomErrorCode.ANALYSIS_TYPE_INVALID,
+            msg=f"分析时段非法，仅支持 {'/'.join(SESSION_TYPE_NAMES.values())}",
+        )
+    return session
+
+
 def _page_data(records, page, page_size, total):
     return ResponsePageDataModel(
         records=records, page=page, page_size=page_size, total=total,
@@ -62,13 +74,17 @@ def _page_data(records, page, page_size, total):
 )
 async def run_analysis(
     analysis_type: str,
+    session: str = Query("close", description="分析时段：close-收盘分析，morning-早盘分析"),
     user=Depends(current_user),
     db: AsyncSession = Depends(get_session),
 ):
     """手动生成分析：创建执行记录后立即返回，LLM 在后台生成，
     前端轮询 latest 或 runs 接口查看进度与结果"""
     _validate_analysis_type(analysis_type)
-    run_id = await AnalysisExecutor.submit_run(db, analysis_type, trigger_type="manual")
+    _validate_session(session)
+    run_id = await AnalysisExecutor.submit_run(
+        db, analysis_type, trigger_type="manual", session=session,
+    )
     return response_base.success(
         data=AnalysisRunSubmitResult(run_id=run_id),
         msg="已提交生成，请稍后查看分析结果",
@@ -86,11 +102,13 @@ async def run_analysis(
 )
 async def get_analysis_config(
     analysis_type: str,
+    session: str = Query("close", description="分析时段：close-收盘分析，morning-早盘分析"),
     user=Depends(current_user),
     db: AsyncSession = Depends(get_session),
 ):
     _validate_analysis_type(analysis_type)
-    config = await AnalysisConfigService.get_effective(db, analysis_type)
+    _validate_session(session)
+    config = await AnalysisConfigService.get_effective(db, analysis_type, session)
     return response_base.success(data=config)
 
 
@@ -103,11 +121,13 @@ async def get_analysis_config(
 async def update_analysis_config(
     analysis_type: str,
     req: AnalysisConfigUpdateRequest,
+    session: str = Query("close", description="分析时段：close-收盘分析，morning-早盘分析"),
     user=Depends(current_user),
     db: AsyncSession = Depends(get_session),
 ):
     _validate_analysis_type(analysis_type)
-    config = await AnalysisConfigService.update_config(db, analysis_type, req)
+    _validate_session(session)
+    config = await AnalysisConfigService.update_config(db, analysis_type, req, session)
     return response_base.success(data=config, msg="保存成功，下次生成分析时生效")
 
 
@@ -122,14 +142,17 @@ async def update_analysis_config(
 )
 async def get_latest_analysis(
     analysis_type: str,
+    session: str = Query("close", description="分析时段：close-收盘分析，morning-早盘分析"),
     user=Depends(current_user),
     db: AsyncSession = Depends(get_session),
 ):
     _validate_analysis_type(analysis_type)
+    _validate_session(session)
     result = await db.execute(
         select(BusinessAnalysisRun)
         .where(
             BusinessAnalysisRun.analysis_type == analysis_type,
+            BusinessAnalysisRun.session == session,
             BusinessAnalysisRun.deleted_at.is_(None),
         )
         .order_by(BusinessAnalysisRun.created_at.desc())
@@ -151,12 +174,15 @@ async def get_analysis_runs(
     analysis_type: str,
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
+    session: str = Query("close", description="分析时段：close-收盘分析，morning-早盘分析"),
     user=Depends(current_user),
     db: AsyncSession = Depends(get_session),
 ):
     _validate_analysis_type(analysis_type)
+    _validate_session(session)
     conditions = [
         BusinessAnalysisRun.analysis_type == analysis_type,
+        BusinessAnalysisRun.session == session,
         BusinessAnalysisRun.deleted_at.is_(None),
     ]
     count_result = await db.execute(

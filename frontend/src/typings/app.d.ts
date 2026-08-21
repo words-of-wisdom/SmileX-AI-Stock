@@ -1635,6 +1635,9 @@ declare namespace App {
           totalTurnover: string;
           mainInflowLabel: string;
           turnover: string;
+          compareLabel: string;
+          volumeUp: string;
+          volumeDown: string;
         };
         sector: {
           boardTitle: string;
