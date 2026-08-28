@@ -24,7 +24,7 @@ from database.models.business.strategy import (
 )
 from database.utils.timezone import timezone
 from modules.strategy.services.position_service import PositionService, is_t1_locked
-from modules.strategy.services.quote_helper import fetch_latest_prices
+from modules.strategy.services.quote_helper import fetch_latest_quotes
 
 logger = logging.getLogger(__name__)
 
@@ -173,7 +173,9 @@ class TradeEngine:
         positions = list(pos_result.scalars().all())
 
         codes = {s.stock_code for s in pending_signals} | {p.stock_code for p in positions}
-        prices = await fetch_latest_prices(list(codes)) if codes else {}
+        quotes = await fetch_latest_quotes(list(codes)) if codes else {}
+        prices = {code: q["price"] for code, q in quotes.items()}
+        changes = {code: q["change_pct"] for code, q in quotes.items() if q["change_pct"] is not None}
 
         # strategy_id -> {stock_code: position}
         holding_map: dict[int, dict[str, BusinessStrategyPosition]] = {}
@@ -300,7 +302,7 @@ class TradeEngine:
                 )
 
         # ---- 8. 持仓跟踪：刷新价格/浮盈 + 止损/止盈/目标价自动平仓（复用已拉行情） ----
-        track_stats = await PositionService.track_positions(db, prices=prices)
+        track_stats = await PositionService.track_positions(db, prices=prices, changes=changes)
         total["tracked"] = track_stats.get("tracked", 0)
         total["track_closed"] = track_stats.get("closed", 0)
 

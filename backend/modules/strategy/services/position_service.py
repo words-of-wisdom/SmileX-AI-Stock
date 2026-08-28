@@ -18,7 +18,7 @@ from database.models.business.strategy import (
     BusinessPositionTrackLog,
 )
 from database.utils.timezone import timezone
-from modules.strategy.services.quote_helper import fetch_latest_prices
+from modules.strategy.services.quote_helper import fetch_latest_quotes
 from modules.strategy.schemas.strategy import PositionItem, TrackLogItem, StrategyStatsItem
 
 logger = logging.getLogger(__name__)
@@ -29,6 +29,16 @@ def is_t1_locked(buy_time: datetime, now: datetime) -> bool:
     return buy_time.date() == now.date()
 
 
+def limit_up_threshold(stock_code: str) -> float:
+    """个股涨停判定阈值（%）：创业板/科创板 20%、北交所 30%、主板 10%
+    （按 19/29/9 判定以容忍价格精度；ST 5% 无法从代码识别，忽略）"""
+    if stock_code.startswith(("30", "68")):
+        return 19.0
+    if stock_code.startswith(("4", "8")):
+        return 29.0
+    return 9.0
+
+
 class PositionService:
     """策略持仓服务类"""
 
@@ -36,12 +46,17 @@ class PositionService:
     # 持仓跟踪（定时任务调用）
     # ------------------------------------------------------------------
     @staticmethod
-    async def track_positions(db: AsyncSession, prices: dict[str, float] | None = None) -> dict:
+    async def track_positions(
+        db: AsyncSession,
+        prices: dict[str, float] | None = None,
+        changes: dict[str, float] | None = None,
+    ) -> dict:
         """刷新全部持仓中个股的最新价/浮盈，触发止损/止盈/目标价自动平仓。
 
         prices: 调用方已批量拉取的实时价映射（交易引擎传入，避免重复拉取），
                 为 None 时自行拉取。
-        返回：{tracked, closed, failed, total}
+        changes: 实时涨跌幅映射（相对昨收%），用于「涨停暂缓平仓」判断；缺省时不启用。
+        返回：{tracked, closed, limit_protected, failed, total}
         """
         now = timezone.now()
         result = await db.execute(
@@ -52,13 +67,16 @@ class PositionService:
         )
         positions = list(result.scalars().all())
         if not positions:
-            return {"tracked": 0, "closed": 0, "total": 0}
+            return {"tracked": 0, "closed": 0, "limit_protected": 0, "total": 0}
 
+        quotes: dict[str, dict] = {}
         if prices is None:
-            codes = list({p.stock_code for p in positions})
-            prices = await fetch_latest_prices(codes)
+            quotes = await fetch_latest_quotes(
+                list({p.stock_code for p in positions})
+            )
+            prices = {code: q["price"] for code, q in quotes.items()}
 
-        tracked = closed = 0
+        tracked = closed = limit_protected = 0
         for pos in positions:
             price = prices.get(pos.stock_code)
             if not price:
@@ -82,6 +100,21 @@ class PositionService:
                 if pos.stop_loss_price and price <= float(pos.stop_loss_price):
                     sell_reason = "stop_loss"
                 elif pos.target_sell_price and price >= float(pos.target_sell_price):
+                    # 涨停暂缓平仓：已达目标价但个股封涨停（连板潜力）时不机械卖出，
+                    # 交由每 10 分钟的策略分析对持仓做二次研判（hold/adjust 上移卖点/sell）
+                    change_pct = None
+                    if changes is not None:
+                        change_pct = changes.get(pos.stock_code)
+                    elif quotes.get(pos.stock_code):
+                        change_pct = quotes[pos.stock_code].get("change_pct")
+                    if change_pct is not None and change_pct >= limit_up_threshold(pos.stock_code):
+                        limit_protected += 1
+                        db.add(BusinessPositionTrackLog(
+                            position_id=pos.id, track_time=now,
+                            latest_price=price, pnl_pct=pnl_pct,
+                            adjust_reason=f"涨停({change_pct:.2f}%)暂缓平仓，等待AI二次研判",
+                        ))
+                        continue
                     sell_reason = "target_reached"
 
             if sell_reason:
@@ -98,9 +131,14 @@ class PositionService:
             ))
 
         await db.commit()
-        logger.info("持仓跟踪完成: total=%d tracked=%d closed=%d",
-                    len(positions), tracked, closed)
-        return {"tracked": tracked, "closed": closed, "total": len(positions)}
+        logger.info(
+            "持仓跟踪完成: total=%d tracked=%d closed=%d limit_protected=%d",
+            len(positions), tracked, closed, limit_protected,
+        )
+        return {
+            "tracked": tracked, "closed": closed,
+            "limit_protected": limit_protected, "total": len(positions),
+        }
 
     # ------------------------------------------------------------------
     # 查询

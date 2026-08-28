@@ -61,3 +61,11 @@
 - 逻辑：板块资金**连续 ≥3 日净流入且放大**但阶段涨幅平庸（资金吸筹未兑现）→ 板块内选近 10 日无 7%+ 单日涨幅、无涨停、无 10%+ 阶段大涨的温和放量个股潜伏，等资金发酵主升。
 - 配置：category=general，execute_periods=["noon","tail"]，max_positions=4，止损 4%，止盈 10%；纪律：买点须近平台/支撑、当日涨幅>5% 不买、3~5 日资金转流出且滞涨主动换股、宁缺毋滥。
 - 落地：0016 `_PRESET_STRATEGIES` 加 seq 11（新环境真源）+ 直接 INSERT 运行库 id=2942406616009111（**status=true 直接启用**，区别于其他预置默认停用）；坑：`execute_periods` 列是 `json` 不是 `jsonb`，参数 cast `::jsonb` 会报错。
+
+## 2026-08-28 四次追加：涨停暂缓平仓（连板潜力二次研判）
+
+问题：`track_positions` 的 target_reached 是机械平仓——涨停封板瞬间达到目标价就自动卖出，砍掉连板溢价。改为**涨停保护**：
+- `quote_helper` 新增 `fetch_latest_quotes`（{code: {price, change_pct}}），`fetch_latest_prices` 变薄包装；`_sina` 本就解析 change_pct（f[2]昨收/f[3]最新）。
+- `position_service.track_positions`：目标价触发但当日涨跌幅 ≥ 涨停阈值（`limit_up_threshold`：30/68 开头 19%、4/8 北交所 29%、主板 9%）→ 不平仓，写 TrackLog（adjust_reason 记"涨停暂缓平仓，等待AI二次研判"），交由每 10 分钟策略分析对持仓二次研判（hold/adjust 上移卖点/sell）；若开板回落价格仍 ≥ 目标则下一分钟正常平仓。止损不受影响。
+- `trade_engine`：一次拉 quotes 派生 prices/changes 透传；返回统计加 `limit_protected`。
+- AI 卖出侧：SYSTEM_PROMPT 加纪律「封死涨停的持仓不给 sell（连板潜力保留），高位炸板/放量滞涨/尾盘跳水果断 sell」；`_build_user_prompt` 持仓行注入现价相对买价涨幅，供二次研判。

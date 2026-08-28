@@ -65,6 +65,8 @@ SYSTEM_PROMPT = """你是 SmileX-AI-Stock 平台的 AI 策略分析师，负责�
    严禁使用历史价/记忆中的价格；若快照缺失某股实时价，不得给出该股的 buy 信号
 4. 止损价必须低于 buy_price、目标价必须高于 buy_price，且严格按策略风控比例设置
 5. 若个股已较近期低点大幅拉升（追高风险明显），宁可放弃信号也不要追高买入
+6. 持仓卖出研判：当前封死涨停（涨跌幅达涨停位）的持仓不要给出 sell——连板潜力需保留
+   （等开板走弱或次日再评估）；但高位炸板、放量滞涨、尾盘跳水的持仓应果断 sell
 
 最终必须输出一个 JSON 数组（可包在 ```json 代码块中），每个元素格式如下：
 [
@@ -226,11 +228,15 @@ def _build_user_prompt(
         )
 
     if holdings:
-        hold_lines = [
-            f"- {h.stock_code} {h.stock_name}：买价 {h.buy_price}，"
-            f"预估卖点 {h.target_sell_price or '无'}，止损价 {h.stop_loss_price or '无'}"
-            for h in holdings
-        ]
+        hold_lines = []
+        for h in holdings:
+            cur = realtime_quotes.get(h.stock_code) if realtime_quotes else None
+            chg = f"{(cur / float(h.buy_price) - 1) * 100:+.1f}%" if cur else "未知"
+            hold_lines.append(
+                f"- {h.stock_code} {h.stock_name}：买价 {h.buy_price}，"
+                f"现价相对买价 {chg}，"
+                f"预估卖点 {h.target_sell_price or '无'}，止损价 {h.stop_loss_price or '无'}"
+            )
         parts.append("当前持仓（对已持仓个股请重点评估是否卖出/调整卖点，action=sell 或 adjust）：\n" + "\n".join(hold_lines))
 
     # 实时行情快照：工具数据多为收盘后快照，盘中决策与 buy_price 必须以本快照最新价为准

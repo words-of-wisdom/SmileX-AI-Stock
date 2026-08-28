@@ -25,20 +25,27 @@ def _to_sina_code(code: str) -> str:
     return code
 
 
-async def fetch_latest_prices(codes: list[str]) -> dict[str, float]:
-    """批量获取个股最新价。返回 {原始6位代码: 最新价}，失败/停牌的代码缺席。"""
+async def fetch_latest_quotes(codes: list[str]) -> dict[str, dict]:
+    """批量获取个股最新价与涨跌幅。返回 {原始6位代码: {price, change_pct}}，
+    失败/停牌的代码缺席。change_pct 为相对昨收的百分比。"""
     if not codes:
         return {}
     sina_map = {_to_sina_code(c): c for c in codes}
     try:
         quotes = await fetch_spot_quotes(list(sina_map.keys()))
     except Exception as exc:  # noqa: BLE001
-        logger.warning("批量获取最新价失败: %s", exc)
+        logger.warning("批量获取实时行情失败: %s", exc)
         return {}
-    result: dict[str, float] = {}
+    result: dict[str, dict] = {}
     for sina_code, quote in quotes.items():
         price = quote.get("latest_price")
         origin = sina_map.get(sina_code)
         if origin and price:
-            result[origin] = price
+            result[origin] = {"price": price, "change_pct": quote.get("change_pct")}
     return result
+
+
+async def fetch_latest_prices(codes: list[str]) -> dict[str, float]:
+    """批量获取个股最新价。返回 {原始6位代码: 最新价}，失败/停牌的代码缺席。"""
+    quotes = await fetch_latest_quotes(codes)
+    return {code: q["price"] for code, q in quotes.items()}
