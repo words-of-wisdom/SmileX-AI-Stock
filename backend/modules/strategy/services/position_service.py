@@ -56,7 +56,8 @@ class PositionService:
         prices: 调用方已批量拉取的实时价映射（交易引擎传入，避免重复拉取），
                 为 None 时自行拉取。
         changes: 实时涨跌幅映射（相对昨收%），用于「涨停暂缓平仓」判断；缺省时不启用。
-        返回：{tracked, closed, limit_protected, failed, total}
+        返回：{tracked, closed, limit_protected, review_strategy_ids, failed, total}
+        review_strategy_ids：发生涨停保护、需要触发 AI 复核的策略 ID 集合
         """
         now = timezone.now()
         result = await db.execute(
@@ -67,7 +68,8 @@ class PositionService:
         )
         positions = list(result.scalars().all())
         if not positions:
-            return {"tracked": 0, "closed": 0, "limit_protected": 0, "total": 0}
+            return {"tracked": 0, "closed": 0, "limit_protected": 0,
+                    "review_strategy_ids": set(), "total": 0}
 
         quotes: dict[str, dict] = {}
         if prices is None:
@@ -77,6 +79,7 @@ class PositionService:
             prices = {code: q["price"] for code, q in quotes.items()}
 
         tracked = closed = limit_protected = 0
+        review_strategy_ids: set[int] = set()
         for pos in positions:
             price = prices.get(pos.stock_code)
             if not price:
@@ -109,6 +112,7 @@ class PositionService:
                         change_pct = quotes[pos.stock_code].get("change_pct")
                     if change_pct is not None and change_pct >= limit_up_threshold(pos.stock_code):
                         limit_protected += 1
+                        review_strategy_ids.add(pos.strategy_id)
                         db.add(BusinessPositionTrackLog(
                             position_id=pos.id, track_time=now,
                             latest_price=price, pnl_pct=pnl_pct,
@@ -137,7 +141,9 @@ class PositionService:
         )
         return {
             "tracked": tracked, "closed": closed,
-            "limit_protected": limit_protected, "total": len(positions),
+            "limit_protected": limit_protected,
+            "review_strategy_ids": review_strategy_ids,
+            "total": len(positions),
         }
 
     # ------------------------------------------------------------------

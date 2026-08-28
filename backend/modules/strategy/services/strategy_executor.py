@@ -197,6 +197,7 @@ def _build_user_prompt(
     holdings: list[BusinessStrategyPosition],
     run_period_name: str,
     realtime_quotes: dict[str, float] | None = None,
+    is_review: bool = False,
 ) -> str:
     parts = [
         f"当前执行时段：{run_period_name}，当前时间：{timezone.now().strftime('%Y-%m-%d %H:%M')}",
@@ -248,6 +249,13 @@ def _build_user_prompt(
         )
     else:
         parts.append("注意：实时行情快照获取失败，此时禁止给出任何 buy 信号（只可评估持仓卖出/调整）。")
+
+    if is_review:
+        parts.append(
+            "本轮为涨停保护触发的盘中持仓复核：重点评估涨停持仓是连板潜力保留（hold）、"
+            "上移卖点锁定利润（adjust），还是炸板/滞涨/尾盘走弱兑现离场（sell）；"
+            "除非出现极高把握的机会，本轮不要给出新买入信号。"
+        )
 
     parts.append("请基于工具获取的最新真实数据，输出 JSON 信号数组。")
     return "\n".join(parts)
@@ -399,6 +407,7 @@ class StrategyExecutor:
         user_prompt = _build_user_prompt(
             strategy, holdings, EXECUTE_PERIOD_NAMES.get(run_period, run_period),
             realtime_quotes=realtime_quotes,
+            is_review=(run_period == "review"),
         )
         raw_text = await _run_llm(db, user_prompt)
         run.ai_raw_response = raw_text[:20000]

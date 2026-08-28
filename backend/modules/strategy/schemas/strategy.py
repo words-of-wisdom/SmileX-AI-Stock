@@ -19,6 +19,7 @@ EXECUTE_PERIOD_NAMES = {
     "tail": "尾盘",
     "post_close": "盘后",
     "manual": "手动执行",
+    "review": "盘中持仓复核（涨停保护触发）",
 }
 
 # 策略分类常量（预置策略与用户自建共用，自建默认 general）

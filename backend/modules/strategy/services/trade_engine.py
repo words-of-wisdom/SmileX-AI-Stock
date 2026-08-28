@@ -49,6 +49,9 @@ _ACTION_ORDER = {"sell": 0, "buy": 1, "adjust": 2}
 # （历史数据：67 笔已执行买入平均偏差 29.3%，最大 953%，买入远高于 AI 假设价位）
 REF_PRICE_MAX_DEVIATION_PCT = 3.0
 
+# 涨停保护触发的 AI 复核节流窗口（分钟）：同策略窗口内已有复核运行时不重复提交
+REVIEW_THROTTLE_MINUTES = 30
+
 
 def _in_trading_hours(now: datetime) -> bool:
     """是否处于连续竞价时段（周一至周五）"""
@@ -305,6 +308,12 @@ class TradeEngine:
         track_stats = await PositionService.track_positions(db, prices=prices, changes=changes)
         total["tracked"] = track_stats.get("tracked", 0)
         total["track_closed"] = track_stats.get("closed", 0)
+        total["limit_protected"] = track_stats.get("limit_protected", 0)
+
+        # ---- 9. 涨停保护触发的 AI 即时复核（不受时段窗口限制，30 分钟节流） ----
+        total["review_submitted"] = await TradeEngine._submit_limit_reviews(
+            db, strategies, track_stats.get("review_strategy_ids") or set(), now
+        )
 
         await db.commit()
         logger.info(
@@ -317,6 +326,50 @@ class TradeEngine:
     # ------------------------------------------------------------------
     # 内部工具
     # ------------------------------------------------------------------
+    @staticmethod
+    async def _submit_limit_reviews(
+        db: AsyncSession,
+        strategies: dict[int, BusinessAiStrategy],
+        strategy_ids: set[int],
+        now: datetime,
+    ) -> int:
+        """涨停保护触发的 AI 即时复核：为对应策略异步提交一轮持仓复核分析。
+
+        不受策略执行时段窗口限制（持仓风险管理优先），30 分钟节流防重复提交，
+        并发守卫由 submit_run 的 running 检查兜底。
+        """
+        if not strategy_ids:
+            return 0
+        from modules.strategy.services.strategy_executor import StrategyExecutor
+
+        throttle_before = now - timedelta(minutes=REVIEW_THROTTLE_MINUTES)
+        submitted = 0
+        for sid in strategy_ids:
+            strategy = strategies.get(sid)
+            if strategy is None:
+                continue  # 策略已停用/删除，交给持仓跟踪的机械规则兜底
+            dup = await db.execute(
+                select(BusinessStrategyRun.id).where(
+                    BusinessStrategyRun.strategy_id == sid,
+                    BusinessStrategyRun.run_period == "review",
+                    BusinessStrategyRun.created_at >= throttle_before,
+                    BusinessStrategyRun.deleted_at.is_(None),
+                ).limit(1)
+            )
+            if dup.scalar_one_or_none() is not None:
+                continue
+            try:
+                await StrategyExecutor.submit_run(
+                    db, strategy, run_period="review", trigger_type="review"
+                )
+                submitted += 1
+            except Exception:  # noqa: BLE001  并发守卫等业务异常不阻断 tick
+                logger.warning("涨停复核提交失败: strategy=%s", strategy.name, exc_info=True)
+        if submitted:
+            logger.info("涨停保护触发 AI 复核: submitted=%d strategies=%s",
+                        submitted, sorted(strategy_ids))
+        return submitted
+
     @staticmethod
     def _close_position(pos: BusinessStrategyPosition, price: float, now: datetime) -> None:
         """按给定价格平仓（AI 信号卖出）"""

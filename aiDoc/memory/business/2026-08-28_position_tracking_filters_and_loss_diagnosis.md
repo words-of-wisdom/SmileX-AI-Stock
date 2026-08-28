@@ -69,3 +69,11 @@
 - `position_service.track_positions`：目标价触发但当日涨跌幅 ≥ 涨停阈值（`limit_up_threshold`：30/68 开头 19%、4/8 北交所 29%、主板 9%）→ 不平仓，写 TrackLog（adjust_reason 记"涨停暂缓平仓，等待AI二次研判"），交由每 10 分钟策略分析对持仓二次研判（hold/adjust 上移卖点/sell）；若开板回落价格仍 ≥ 目标则下一分钟正常平仓。止损不受影响。
 - `trade_engine`：一次拉 quotes 派生 prices/changes 透传；返回统计加 `limit_protected`。
 - AI 卖出侧：SYSTEM_PROMPT 加纪律「封死涨停的持仓不给 sell（连板潜力保留），高位炸板/放量滞涨/尾盘跳水果断 sell」；`_build_user_prompt` 持仓行注入现价相对买价涨幅，供二次研判。
+
+## 2026-08-28 五次追加：涨停保护触发 AI 即时复核（补时段空窗）
+
+问题：`strategy.run_execute` 是**同日同时段去重**（每时段只跑一次），早盘封板要等 13:00 才有下一次 AI 研判，空窗最长 3 小时。改为**持仓触发的即时复核**：
+- `track_positions` 返回新增 `review_strategy_ids`（发生涨停保护的策略集合）。
+- `trade_engine._submit_limit_reviews`：tick 末尾为这些策略直接 `submit_run(run_period="review", trigger_type="review")`——不受时段窗口限制、不限 execute_periods；**30 分钟节流**（`REVIEW_THROTTLE_MINUTES`，按 review run 的 created_at 查重）+ submit_run 并发守卫兜底；提交失败不阻断 tick。
+- `EXECUTE_PERIOD_NAMES` 加 `"review": "盘中持仓复核（涨停保护触发）"`；`_build_user_prompt` 新增 `is_review`——复核轮提示词明确「重点 hold/adjust/sell 涨停持仓，非极高把握不出新买入信号」。
+- 效果：封板保护后 **~10 分钟内**（下一 tick 提交 + LLM 分析时长）AI 即来复核。
