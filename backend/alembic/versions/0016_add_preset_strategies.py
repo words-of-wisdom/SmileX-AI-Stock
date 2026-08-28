@@ -60,14 +60,16 @@ _PRESET_STRATEGIES = [
             "\n"
             "买卖纪律：\n"
             "- 买入参考竞价价格，单日最多新建 2~3 只\n"
-            "- 目标：开盘后惯性冲高获利，当日或次日冲高即卖（target_sell_price 按 +3%~+5% 设置）\n"
+            "- 高开超过 6% 一律不追（隔夜跳空止损滑点大，历史亏损多来自高位接力）\n"
+            "- 竞价须放量（量比>2）但非巨量高开出逃形态，量价背离直接放弃\n"
+            "- 目标：开盘后惯性冲高获利，当日或次日冲高即卖（target_sell_price 按 +3%~+4% 设置，冲高果断兑现）\n"
             "- 止损：开盘后走势不及预期、跌破竞价低点或分时均价线即离场（stop_loss_price 按 -3% 设置）"
         ),
         "stock_pool": None,
         "execute_periods": ["pre_market"],
         "max_positions": 3,
         "stop_loss_pct": 3.0,
-        "take_profit_pct": 5.0,
+        "take_profit_pct": 4.0,
     },
     {
         "seq": 2,
@@ -105,15 +107,17 @@ _PRESET_STRATEGIES = [
             "4. 回避：上午已涨停午后开板的弱势回封股、放量下跌破均价线的真跌个股、ST 股\n"
             "\n"
             "买卖纪律：\n"
-            "- 回踩企稳（重新翻红或站回均价线）时买入，不追上午的高点\n"
-            "- 目标：尾盘板块再度走强带动冲高（target_sell_price 按 +4%~+6% 设置）\n"
-            "- 止损：午后跌破均价线且板块整体转弱（stop_loss_price 按 -3% 设置）"
+            "- 必须等回踩至分时均价线附近且企稳信号明确（止跌翻红/缩量止跌）后才给 buy，禁止在均价线上方高位直接追多\n"
+            "- 当日涨幅已超 6% 的个股不买（尾盘冲高回落风险大）\n"
+            "- 目标：尾盘板块再度走强带动冲高（target_sell_price 按 +3%~+5% 设置，达到即兑现不贪）\n"
+            "- 止损：午后跌破均价线且板块整体转弱（stop_loss_price 按 -3% 设置）\n"
+            "- 信号宁缺毋滥：无明确企稳形态时输出空数组"
         ),
         "stock_pool": None,
         "execute_periods": ["noon"],
         "max_positions": 5,
         "stop_loss_pct": 3.0,
-        "take_profit_pct": 6.0,
+        "take_profit_pct": 5.0,
     },
     {
         "seq": 4,
@@ -129,14 +133,14 @@ _PRESET_STRATEGIES = [
             "\n"
             "买卖纪律：\n"
             "- 午后启动初期介入，不追已快速拉升超过 5% 的标的\n"
-            "- 目标：补涨行情通常 1~3 天，吃到主升段即走（target_sell_price 按 +6%~+10% 设置）\n"
+            "- 目标：补涨行情通常 1~3 天，吃到主升段即走（target_sell_price 按 +5%~+7% 设置）\n"
             "- 止损：轮动逻辑证伪（主线熄火+补涨方向无人跟进）即离场（stop_loss_price 按 -4% 设置）"
         ),
         "stock_pool": None,
         "execute_periods": ["noon"],
         "max_positions": 5,
         "stop_loss_pct": 4.0,
-        "take_profit_pct": 10.0,
+        "take_profit_pct": 7.0,
     },
     {
         "seq": 5,
@@ -152,14 +156,16 @@ _PRESET_STRATEGIES = [
             "\n"
             "买卖纪律：\n"
             "- 尾盘 14:30~14:55 间确认强势后买入，博次日惯性高开\n"
-            "- 目标：次日高开冲高即兑现，不恋战（target_sell_price 按 +4%~+8% 设置）\n"
-            "- 止损：次日低开低走不及预期立即离场（stop_loss_price 按 -3% 设置）"
+            "- 只选全天涨幅 2%~5%、尾盘温和放量走强的标的；当日涨幅已超 6% 或尾盘直线拉升的一律不买（隔夜跳空止损滑点大，历史亏损集中于此）\n"
+            "- 目标：次日高开冲高即兑现，不恋战（target_sell_price 按 +4%~+6% 设置）\n"
+            "- 止损：次日低开低走不及预期立即离场（stop_loss_price 按 -3% 设置，开盘观察 10 分钟内确认走弱再执行）\n"
+            "- 信号宁缺毋滥：尾盘无符合条件标的时输出空数组"
         ),
         "stock_pool": None,
         "execute_periods": ["tail"],
-        "max_positions": 3,
+        "max_positions": 2,
         "stop_loss_pct": 3.0,
-        "take_profit_pct": 8.0,
+        "take_profit_pct": 6.0,
     },
     {
         "seq": 6,
@@ -175,14 +181,16 @@ _PRESET_STRATEGIES = [
             "\n"
             "买卖纪律：\n"
             "- 尾盘买入隔夜持有，博次日趋势延续\n"
-            "- 目标：趋势延续可持有 2~5 天，移动止盈（target_sell_price 初步按 +6%~+10% 设置，后续可 adjust 上移）\n"
-            "- 止损：隔夜逻辑证伪（次日低开破位）坚决止损（stop_loss_price 按 -4% 设置）"
+            "- 回避当日涨幅超 7%、已连续拉升 3 日以上的加速股（隔夜跳空风险大，历史止损全部来自此类高位接力）；优先当日涨幅 2%~6%、趋势初中期的温和强势股\n"
+            "- 目标：趋势延续可持有 2~5 天，移动止盈（target_sell_price 初步按 +5%~+7% 设置，后续可 adjust 上移）\n"
+            "- 止损：隔夜逻辑证伪（次日低开破位）坚决止损（stop_loss_price 按 -4% 设置）\n"
+            "- 信号宁缺毋滥：大盘或个股形态不理想时输出空数组"
         ),
         "stock_pool": None,
         "execute_periods": ["tail"],
-        "max_positions": 5,
+        "max_positions": 3,
         "stop_loss_pct": 4.0,
-        "take_profit_pct": 10.0,
+        "take_profit_pct": 7.0,
     },
     {
         "seq": 7,
