@@ -33,7 +33,7 @@ from database.utils.timezone import timezone
 from modules.agent.services.llm_client import resolve_model, stream_chat
 from modules.agent.services.tool_registry import get_openai_format, execute
 from modules.strategy.schemas.strategy import SignalItem
-
+from modules.strategy.services.quote_helper import fetch_latest_prices
 logger = logging.getLogger(__name__)
 
 # ReAct 最大迭代轮数（与 agent_service 保持一致）
@@ -61,6 +61,10 @@ SYSTEM_PROMPT = """你是 SmileX-AI-Stock 平台的 AI 策略分析师，负责�
 工作流程：
 1. 先调用工具获取真实行情数据，禁止凭空编造价格和数据
 2. 结合当前持仓情况，按策略要求给出信号
+3. buy_price 必须以用户消息中提供的「实时行情快照」最新价为基准（可在 ±2% 内小幅浮动），
+   严禁使用历史价/记忆中的价格；若快照缺失某股实时价，不得给出该股的 buy 信号
+4. 止损价必须低于 buy_price、目标价必须高于 buy_price，且严格按策略风控比例设置
+5. 若个股已较近期低点大幅拉升（追高风险明显），宁可放弃信号也不要追高买入
 
 最终必须输出一个 JSON 数组（可包在 ```json 代码块中），每个元素格式如下：
 [
@@ -190,6 +194,7 @@ def _build_user_prompt(
     strategy: BusinessAiStrategy,
     holdings: list[BusinessStrategyPosition],
     run_period_name: str,
+    realtime_quotes: dict[str, float] | None = None,
 ) -> str:
     parts = [
         f"当前执行时段：{run_period_name}，当前时间：{timezone.now().strftime('%Y-%m-%d %H:%M')}",
@@ -227,6 +232,16 @@ def _build_user_prompt(
             for h in holdings
         ]
         parts.append("当前持仓（对已持仓个股请重点评估是否卖出/调整卖点，action=sell 或 adjust）：\n" + "\n".join(hold_lines))
+
+    # 实时行情快照：工具数据多为收盘后快照，盘中决策与 buy_price 必须以本快照最新价为准
+    if realtime_quotes:
+        quote_lines = [f"- {code}: {price}" for code, price in sorted(realtime_quotes.items())]
+        parts.append(
+            "实时行情快照（新浪实时接口，生成于本次分析时刻；buy_price 必须以此为准，"
+            "快照中缺失实时价的个股禁止给出 buy 信号）：\n" + "\n".join(quote_lines)
+        )
+    else:
+        parts.append("注意：实时行情快照获取失败，此时禁止给出任何 buy 信号（只可评估持仓卖出/调整）。")
 
     parts.append("请基于工具获取的最新真实数据，输出 JSON 信号数组。")
     return "\n".join(parts)
@@ -362,19 +377,32 @@ class StrategyExecutor:
         )
         holdings = list(hold_result.scalars().all())
 
-        # 2. LLM 分析
+        # 2. 拉取候选股实时行情（股票池 ∪ 持仓股，新浪实时接口）
+        #    AI 工具数据多为收盘后快照，buy_price 参考价必须锚定实时价，防过期/幻觉价
+        pool = (strategy.stock_pool or {}).get("codes") if strategy.stock_pool else None
+        quote_codes = list({str(c) for c in (pool or [])} | {h.stock_code for h in holdings})
+        realtime_quotes: dict[str, float] = {}
+        if quote_codes:
+            try:
+                realtime_quotes = await fetch_latest_prices(quote_codes)
+            except Exception:  # noqa: BLE001
+                logger.warning("策略分析实时行情拉取失败: strategy=%s", strategy.name, exc_info=True)
+                realtime_quotes = {}
+
+        # 3. LLM 分析
         user_prompt = _build_user_prompt(
-            strategy, holdings, EXECUTE_PERIOD_NAMES.get(run_period, run_period)
+            strategy, holdings, EXECUTE_PERIOD_NAMES.get(run_period, run_period),
+            realtime_quotes=realtime_quotes,
         )
         raw_text = await _run_llm(db, user_prompt)
         run.ai_raw_response = raw_text[:20000]
 
-        # 3. 解析信号
+        # 4. 解析信号
         raw_signals = _extract_json_array(raw_text)
         signals = [s for s in (_to_signal(r) for r in raw_signals if isinstance(r, dict)) if s]
         run.parsed_signals = [s.model_dump() for s in signals]
 
-        # 4. 作废同策略旧待执行信号（新一轮分析信号替换旧信号）
+        # 5. 作废同策略旧待执行信号（新一轮分析信号替换旧信号）
         await db.execute(
             update(BusinessStrategySignal)
             .where(
@@ -386,7 +414,7 @@ class StrategyExecutor:
             .execution_options(synchronize_session=False)
         )
 
-        # 5. 写入新待执行信号（hold 无点位变化，不落表）
+        # 6. 写入新待执行信号（hold 无点位变化，不落表）
         pending = 0
         for sig in signals:
             if sig.action == "hold":

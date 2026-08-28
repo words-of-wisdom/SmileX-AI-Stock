@@ -4,6 +4,7 @@ import {
   NButton,
   NCard,
   NDataTable,
+  NDatePicker,
   NDrawer,
   NDrawerContent,
   NInput,
@@ -17,7 +18,7 @@ import {
   NTag,
   NText
 } from 'naive-ui';
-import type { DataTableColumns } from 'naive-ui';
+import type { DataTableColumns, DataTableSortState } from 'naive-ui';
 import dayjs from 'dayjs';
 import {
   fetchCloseStrategyPosition,
@@ -32,10 +33,13 @@ import {
   fetchUpdateStrategy
 } from '@/service/api';
 import { useAutoRefresh } from '@/hooks/common/auto-refresh';
+import { useAppStore } from '@/store/modules/app';
 import { $t } from '@/locales';
 import StrategyOperateDrawer from './modules/strategy-operate-drawer.vue';
 
 defineOptions({ name: 'AiAnalysis' });
+
+const appStore = useAppStore();
 
 const activeTab = ref<'strategies' | 'positions' | 'stats'>('strategies');
 
@@ -385,6 +389,26 @@ const positionSearch = reactive({
   status: 'holding' as Api.Strategy.PositionStatus | undefined,
   stock_code: ''
 });
+/** 建仓时间段筛选（时间戳毫秒） */
+const positionTimeRange = ref<[number, number] | null>(null);
+/** 服务端排序状态（column key -> 后端 sort_by 映射） */
+const SORT_KEY_MAP: Record<string, string> = {
+  buy_time: 'buy_time',
+  sell_time: 'sell_time',
+  floating_pnl_pct: 'pnl',
+  return_rate: 'return_rate'
+};
+const positionSort = reactive({ by: undefined as string | undefined, desc: false });
+/** 策略筛选下拉选项（独立全量加载，不受策略 Tab 搜索影响） */
+const strategyFilterOptions = ref<{ value: number; label: string }[]>([]);
+
+async function loadStrategyFilterOptions() {
+  const { data, error } = await fetchGetStrategyList({ page: 1, page_size: 100 });
+  if (!error) {
+    strategyFilterOptions.value = (data?.records ?? []).map(s => ({ value: s.id, label: s.name }));
+  }
+}
+
 const positionList = ref<Api.Strategy.PositionItem[]>([]);
 const positionTotal = ref(0);
 const positionPage = reactive({ page: 1, pageSize: 20 });
@@ -394,10 +418,15 @@ const tracking = ref(false);
 async function loadPositions(silent = false) {
   if (!silent) positionLoading.value = true;
   try {
+    const range = positionTimeRange.value;
     const { data, error } = await fetchGetStrategyPositions({
       strategy_id: positionSearch.strategy_id,
       status: positionSearch.status,
       stock_code: positionSearch.stock_code || undefined,
+      start_time: range ? dayjs(range[0]).format('YYYY-MM-DDTHH:mm:ss') : undefined,
+      end_time: range ? dayjs(range[1]).format('YYYY-MM-DDTHH:mm:ss') : undefined,
+      sort_by: positionSort.by,
+      sort_desc: positionSort.by ? positionSort.desc : undefined,
       page: positionPage.page,
       page_size: positionPage.pageSize
     });
@@ -418,6 +447,15 @@ function searchPositions() {
 function onPositionPageChange(page: number) {
   positionPage.page = page;
   loadPositions();
+}
+
+/** 服务端排序：表格列排序变化 */
+function onPositionSorterChange(sorter: DataTableSortState | DataTableSortState[] | null) {
+  const state = Array.isArray(sorter) ? sorter[0] : sorter;
+  const key = state?.columnKey ? String(state.columnKey) : '';
+  positionSort.by = SORT_KEY_MAP[key];
+  positionSort.desc = state?.order === 'descend';
+  searchPositions();
 }
 
 async function onTrack() {
@@ -496,6 +534,7 @@ const positionColumns = computed<DataTableColumns<Api.Strategy.PositionItem>>(()
     key: 'buy_time',
     title: $t('page.aiStrategy.buyTime'),
     width: 140,
+    sorter: true,
     render: row => <span class="text-12px">{fmtTime(row.buy_time)}</span>
   },
   {
@@ -530,6 +569,7 @@ const positionColumns = computed<DataTableColumns<Api.Strategy.PositionItem>>(()
     title: $t('page.aiStrategy.floatingPnl'),
     width: 100,
     align: 'right',
+    sorter: true,
     render: row => renderPct(row.floating_pnl_pct)
   },
   {
@@ -562,6 +602,7 @@ const positionColumns = computed<DataTableColumns<Api.Strategy.PositionItem>>(()
     title: $t('page.aiStrategy.returnRate'),
     width: 100,
     align: 'right',
+    sorter: true,
     render: row => renderPct(row.return_rate)
   },
   {
@@ -580,6 +621,7 @@ const positionColumns = computed<DataTableColumns<Api.Strategy.PositionItem>>(()
     key: 'sell_time',
     title: $t('page.aiStrategy.sellTime'),
     width: 140,
+    sorter: true,
     render: row => <span class="text-12px">{row.sell_time ? fmtTime(row.sell_time) : '-'}</span>
   },
   {
@@ -700,6 +742,7 @@ watch(activeTab, tab => {
 
 onMounted(() => {
   loadStrategies();
+  loadStrategyFilterOptions();
 });
 </script>
 
@@ -741,7 +784,26 @@ onMounted(() => {
         </NSpace>
 
         <!-- ============ 持仓跟踪 ============ -->
-        <NSpace v-else-if="activeTab === 'positions'" align="center" :size="12">
+        <NSpace v-else-if="activeTab === 'positions'" align="center" :size="12" :wrap="false">
+          <NSelect
+            v-model:value="positionSearch.strategy_id"
+            size="small"
+            clearable
+            filterable
+            :placeholder="$t('page.aiStrategy.filterStrategy')"
+            :options="strategyFilterOptions"
+            class="w-140px"
+            @update:value="searchPositions"
+          />
+          <NDatePicker
+            v-model:value="positionTimeRange"
+            type="datetimerange"
+            size="small"
+            clearable
+            :placeholder="$t('page.aiStrategy.filterTimeRange')"
+            class="w-280px"
+            @update:value="searchPositions"
+          />
           <NInput
             v-model:value="positionSearch.stock_code"
             size="small"
@@ -814,26 +876,32 @@ onMounted(() => {
 
       <!-- ============ 持仓跟踪 ============ -->
       <template v-else-if="activeTab === 'positions'">
-        <NDataTable
-          :columns="positionColumns"
-          :data="positionList"
-          size="small"
-          :loading="positionLoading"
-          :scroll-x="1550"
-          :row-key="(row: Api.Strategy.PositionItem) => row.id"
-        />
-        <div class="mt-12px flex items-center justify-between">
-          <NText depth="3" class="text-12px">
-            <icon-mdi-clock-outline class="text-14px" />
-            {{ $t('page.aiStrategy.lastTrack') }}
-            {{ lastRefreshTime ? lastRefreshTime.format('HH:mm:ss') : '-' }}
-          </NText>
-          <NPagination
-            :page="positionPage.page"
-            :page-size="positionPage.pageSize"
-            :item-count="positionTotal"
-            @update:page="onPositionPageChange"
+        <div class="h-full flex-col-stretch">
+          <NDataTable
+            :columns="positionColumns"
+            :data="positionList"
+            size="small"
+            :loading="positionLoading"
+            :scroll-x="1550"
+            :flex-height="!appStore.isMobile"
+            remote
+            class="flex-1-hidden"
+            :row-key="(row: Api.Strategy.PositionItem) => row.id"
+            @update:sorter="onPositionSorterChange"
           />
+          <div class="mt-12px flex items-center justify-between">
+            <NText depth="3" class="text-12px">
+              <icon-mdi-clock-outline class="text-14px" />
+              {{ $t('page.aiStrategy.lastTrack') }}
+              {{ lastRefreshTime ? lastRefreshTime.format('HH:mm:ss') : '-' }}
+            </NText>
+            <NPagination
+              :page="positionPage.page"
+              :page-size="positionPage.pageSize"
+              :item-count="positionTotal"
+              @update:page="onPositionPageChange"
+            />
+          </div>
         </div>
       </template>
 

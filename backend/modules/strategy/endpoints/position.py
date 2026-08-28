@@ -45,13 +45,20 @@ async def get_positions(
     strategy_id: Optional[int] = Query(None, description="策略 ID 过滤"),
     status: Optional[str] = Query(None, description="持仓状态：holding/closed/cancelled"),
     stock_code: Optional[str] = Query(None, description="证券代码模糊查询"),
+    start_time: Optional[str] = Query(None, description="建仓时间起（ISO 8601，如 2026-08-01T00:00:00）"),
+    end_time: Optional[str] = Query(None, description="建仓时间止（ISO 8601）"),
+    sort_by: Optional[str] = Query(
+        None, description="排序列：buy_time/sell_time/pnl/return_rate；为空时默认持仓中在前+建仓时间倒序"
+    ),
+    sort_desc: bool = Query(False, description="是否倒序排序，配合 sort_by 使用"),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     user=Depends(current_user),
     db: AsyncSession = Depends(get_session),
 ):
     items, total = await PositionService.get_positions(
-        db, strategy_id, status, stock_code, page, page_size
+        db, strategy_id, status, stock_code,
+        start_time, end_time, sort_by, sort_desc, page, page_size
     )
     return response_base.success(data=_page_data(items, page, page_size, total))
 

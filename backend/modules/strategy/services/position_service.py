@@ -8,7 +8,7 @@ import logging
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import select, func, case
+from sqlalchemy import select, func, case, nulls_last
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.exception.errors import CustomError
@@ -105,16 +105,33 @@ class PositionService:
     # ------------------------------------------------------------------
     # 查询
     # ------------------------------------------------------------------
+    # 持仓列表排序白名单：请求 sort_by -> 模型列
+    SORT_COLUMNS = {
+        "buy_time": BusinessStrategyPosition.buy_time,
+        "sell_time": BusinessStrategyPosition.sell_time,
+        "pnl": BusinessStrategyPosition.floating_pnl_pct,
+        "return_rate": BusinessStrategyPosition.return_rate,
+    }
+
     @staticmethod
     async def get_positions(
         db: AsyncSession,
         strategy_id: Optional[int] = None,
         status: Optional[str] = None,
         stock_code: Optional[str] = None,
+        start_time: Optional[str] = None,
+        end_time: Optional[str] = None,
+        sort_by: Optional[str] = None,
+        sort_desc: bool = False,
         page: int = 1,
         page_size: int = 20,
     ) -> tuple[list[PositionItem], int]:
-        """分页查询持仓列表，holding 在前、按建仓时间倒序"""
+        """分页查询持仓列表。
+
+        默认排序：holding 在前、按建仓时间倒序；
+        指定 sort_by（白名单内）时按该列排序（NULL 值排最后），holding 前置不再生效。
+        start_time/end_time 按建仓时间过滤，非法时间串忽略。
+        """
         conditions = [BusinessStrategyPosition.deleted_at.is_(None)]
         if strategy_id:
             conditions.append(BusinessStrategyPosition.strategy_id == strategy_id)
@@ -122,20 +139,36 @@ class PositionService:
             conditions.append(BusinessStrategyPosition.status == status)
         if stock_code:
             conditions.append(BusinessStrategyPosition.stock_code.ilike(f"%{stock_code}%"))
+        for raw, op in ((start_time, "__ge__"), (end_time, "__le__")):
+            if not raw:
+                continue
+            try:
+                dt = datetime.fromisoformat(raw)
+                if not dt.tzinfo:
+                    dt = dt.replace(tzinfo=timezone.tz_info)
+            except ValueError:
+                continue
+            conditions.append(getattr(BusinessStrategyPosition.buy_time, op)(dt))
 
         count_result = await db.execute(
             select(func.count()).select_from(BusinessStrategyPosition).where(*conditions)
         )
         total = count_result.scalar() or 0
 
+        sort_col = PositionService.SORT_COLUMNS.get(sort_by or "")
+        if sort_col is not None:
+            order_exprs = [nulls_last(sort_col.desc() if sort_desc else sort_col.asc())]
+        else:
+            order_exprs = [
+                # holding 排前，其余按建仓时间倒序
+                case((BusinessStrategyPosition.status == "holding", 0), else_=1),
+                BusinessStrategyPosition.buy_time.desc(),
+            ]
+
         result = await db.execute(
             select(BusinessStrategyPosition)
             .where(*conditions)
-            .order_by(
-                # holding 排前，其余按卖出时间/建仓时间倒序
-                case((BusinessStrategyPosition.status == "holding", 0), else_=1),
-                BusinessStrategyPosition.buy_time.desc(),
-            )
+            .order_by(*order_exprs)
             .offset((page - 1) * page_size)
             .limit(page_size)
         )

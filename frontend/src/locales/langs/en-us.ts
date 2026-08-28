@@ -1427,6 +1427,8 @@ const local: App.I18n.Schema = {
       categoryGeneral: 'General',
       presetTag: 'Preset',
       searchCode: 'Search stock code',
+      filterStrategy: 'Filter strategy',
+      filterTimeRange: 'Buy time range',
       holdingCount: 'Holding',
       closedCount: 'Closed',
       closedCount2: 'Closed',

@@ -65,6 +65,13 @@ export function fetchGetStrategyPositions(params: {
   strategy_id?: number;
   status?: Api.Strategy.PositionStatus;
   stock_code?: string;
+  /** 建仓时间起，ISO 8601 */
+  start_time?: string;
+  /** 建仓时间止，ISO 8601 */
+  end_time?: string;
+  /** 排序列：buy_time/sell_time/pnl/return_rate */
+  sort_by?: string;
+  sort_desc?: boolean;
   page: number;
   page_size: number;
 }) {

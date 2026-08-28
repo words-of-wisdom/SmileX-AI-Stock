@@ -1420,6 +1420,8 @@ const local: App.I18n.Schema = {
       categoryGeneral: '综合',
       presetTag: '预置',
       searchCode: '搜索证券代码',
+      filterStrategy: '筛选策略',
+      filterTimeRange: '建仓时间段',
       holdingCount: '持仓中',
       closedCount: '已平仓',
       closedCount2: '平仓数',

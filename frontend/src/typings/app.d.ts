@@ -1550,6 +1550,8 @@ declare namespace App {
         categoryGeneral: string;
         presetTag: string;
         searchCode: string;
+        filterStrategy: string;
+        filterTimeRange: string;
         holdingCount: string;
         closedCount: string;
         closedCount2: string;

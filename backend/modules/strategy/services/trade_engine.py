@@ -45,6 +45,10 @@ _TRADING_WINDOWS: tuple[tuple[dt_time, dt_time], ...] = (
 # 信号执行顺序：先卖（腾出仓位）后买再调整
 _ACTION_ORDER = {"sell": 0, "buy": 1, "adjust": 2}
 
+# 买入信号参考价与实时价允许的最大偏差（%）：超出视为 AI 参考价过期/失真，拒单
+# （历史数据：67 笔已执行买入平均偏差 29.3%，最大 953%，买入远高于 AI 假设价位）
+REF_PRICE_MAX_DEVIATION_PCT = 3.0
+
 
 def _in_trading_hours(now: datetime) -> bool:
     """是否处于连续竞价时段（周一至周五）"""
@@ -218,6 +222,20 @@ class TradeEngine:
                     continue
                 if not price:
                     continue
+                # 参考价偏差守卫：实时价偏离 AI 参考价超阈值时拒单
+                # （说明 AI 分析时看到的价格已严重过期，止损/目标位均不可信）
+                if sig.ref_buy_price:
+                    ref = float(sig.ref_buy_price)
+                    if ref > 0:
+                        deviation_pct = abs(price - ref) / ref * 100
+                        if deviation_pct > REF_PRICE_MAX_DEVIATION_PCT:
+                            sig.status = "skipped"
+                            sig.result_msg = (
+                                f"实时价 {price} 与参考价 {ref} 偏差 {deviation_pct:.1f}% "
+                                f"(>{REF_PRICE_MAX_DEVIATION_PCT}%)，拒单"
+                            )
+                            total["skipped"] += 1
+                            continue
                 # AI 价格位校验修正：止损必须低于买价、目标必须高于买价
                 stop_loss, target_sell = _sanitize_price_levels(
                     price, strategy, sig.stop_loss_price, sig.target_sell_price
