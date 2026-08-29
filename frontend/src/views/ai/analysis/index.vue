@@ -159,6 +159,7 @@ const SELL_REASON_LABEL: Record<string, string> = {
   stop_loss: $t('page.aiStrategy.reasonStopLoss'),
   take_profit: $t('page.aiStrategy.reasonTakeProfit'),
   target_reached: $t('page.aiStrategy.reasonTarget'),
+  trailing_stop: $t('page.aiStrategy.reasonTrailingStop'),
   ai_signal: $t('page.aiStrategy.reasonAi'),
   manual: $t('page.aiStrategy.reasonManual')
 };

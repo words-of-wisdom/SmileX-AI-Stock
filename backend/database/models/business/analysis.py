@@ -27,14 +27,14 @@ class BusinessAnalysisRun(Base):
 
     analysis_type: Mapped[str] = mapped_column(
         String(20), nullable=False,
-        comment="分析类型：market-大盘分析，sector-板块分析",
+        comment="分析类型：market-大盘分析，sector-板块分析，news-每日资讯分析",
     )
     run_date: Mapped[str] = mapped_column(
         String(10), nullable=False, comment="执行日期 YYYY-MM-DD（定时任务同日去重用）"
     )
     session: Mapped[str] = mapped_column(
         String(20), nullable=False, default="close",
-        comment="分析时段：close-收盘分析（16:05），morning-早盘分析（9:20）",
+        comment="分析时段：close-收盘分析（16:05），morning-早盘分析（9:20），weekly-周度复盘（周日晚，仅资讯分析）",
     )
     trigger_type: Mapped[str] = mapped_column(
         String(20), nullable=False, default="schedule",

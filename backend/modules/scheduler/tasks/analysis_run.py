@@ -22,8 +22,8 @@ from modules.scheduler.core.registry import scheduled_task
 logger = logging.getLogger(__name__)
 
 
-async def _generate_for_types(session: str) -> dict:
-    """依次生成 market/sector 指定时段的分析（submit_run 落库即返，LLM 在后台任务中进行）"""
+async def _generate_for_types(session: str, analysis_types: tuple = ("market", "sector")) -> dict:
+    """依次生成指定类型的指定时段分析（submit_run 落库即返，LLM 在后台任务中进行）"""
     from sqlalchemy import select
 
     from database.db_manager import get_session
@@ -35,7 +35,7 @@ async def _generate_for_types(session: str) -> dict:
     run_date = now.strftime("%Y-%m-%d")
     total = {"run_date": run_date, "session": session, "submitted": 0, "skipped": 0, "rejected": 0}
     async for db in get_session():
-        for analysis_type in ("market", "sector"):
+        for analysis_type in analysis_types:
             # 同日同类型同时段去重：已有成功/执行中记录则跳过；
             # failed 不算——下个触发点（补跑点）可重新生成，避免当日一次失败导致全天缺报告
             dup = await db.execute(
@@ -83,3 +83,27 @@ async def analysis_auto_generate():
 async def analysis_morning_generate():
     """生成 market/sector 早盘分析（9:20）"""
     return await _generate_for_types("morning")
+
+
+@scheduled_task(
+    cron="25,40 9 * * mon-fri",
+    name="AI每日资讯分析生成",
+    description="交易日 9:25（大盘/板块早盘分析提交后），对近24小时资讯做宏观/行业与个股分类解读（各不超过10条；9:40 为失败补跑点，同日已有成功记录则跳过）",
+    task_key="analysis.news_morning_generate",
+    is_system=True,
+)
+async def analysis_news_morning_generate():
+    """生成 news 每日资讯分析-早盘（9:25）"""
+    return await _generate_for_types("morning", analysis_types=("news",))
+
+
+@scheduled_task(
+    cron="30,50 20 * * sun",
+    name="AI周度资讯复盘生成",
+    description="周日晚 20:30 对本周（近7天）资讯做周度复盘（宏观/行业与个股各不超过10条；20:50 为失败补跑点，同日已有成功记录则跳过）",
+    task_key="analysis.news_weekly_generate",
+    is_system=True,
+)
+async def analysis_news_weekly_generate():
+    """生成 news 每日资讯分析-周度复盘（周日 20:30）"""
+    return await _generate_for_types("weekly", analysis_types=("news",))

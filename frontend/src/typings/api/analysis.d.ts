@@ -1,10 +1,10 @@
 declare namespace Api {
   namespace Analysis {
     /** 分析类型 */
-    export type AnalysisType = 'market' | 'sector';
+    export type AnalysisType = 'market' | 'sector' | 'news';
 
-    /** 分析时段：close-收盘分析（16:05），morning-早盘分析（9:20） */
-    export type SessionType = 'close' | 'morning';
+    /** 分析时段：close-收盘分析（16:05），morning-早盘分析（9:20），weekly-周度复盘（周日晚，仅资讯分析） */
+    export type SessionType = 'close' | 'morning' | 'weekly';
 
     /** 明日研判（parsed_result.tomorrow_outlook） */
     export interface TomorrowOutlook {
@@ -37,6 +37,24 @@ declare namespace Api {
       tomorrow_outlook?: TomorrowOutlook;
     }
 
+    /** 资讯分析分类资讯项（macro_industry_news / stock_news 数组元素） */
+    export interface NewsAnalysisItem {
+      title?: string;
+      category?: string;
+      stock_name?: string;
+      viewpoint?: string;
+      impact?: string;
+      source?: string;
+    }
+
+    /** 每日资讯分析结构化摘要（parsed_result） */
+    export interface NewsParsedResult {
+      macro_industry_news?: NewsAnalysisItem[];
+      stock_news?: NewsAnalysisItem[];
+      summary?: string;
+      key_points?: string[];
+    }
+
     /** 分析策略配置（无记录时后端返回默认值，data 始终非空） */
     export interface AnalysisConfig {
       analysis_type: AnalysisType | string;
@@ -62,7 +80,12 @@ declare namespace Api {
       run_date: string;
       trigger_type: 'schedule' | 'manual';
       status: 'running' | 'success' | 'failed';
-      parsed_result: MarketParsedResult | SectorParsedResult | Record<string, unknown> | null;
+      parsed_result:
+        | MarketParsedResult
+        | SectorParsedResult
+        | NewsParsedResult
+        | Record<string, unknown>
+        | null;
       error_msg: string | null;
       created_at: string | null;
     }

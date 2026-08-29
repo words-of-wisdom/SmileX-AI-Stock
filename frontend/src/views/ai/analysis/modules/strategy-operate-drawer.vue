@@ -70,6 +70,7 @@ type Model = {
   max_positions: number;
   stop_loss_pct: number | null;
   take_profit_pct: number | null;
+  trailing_drawdown_pct: number | null;
   status: boolean;
 };
 
@@ -83,6 +84,7 @@ const model = reactive<Model>({
   max_positions: 10,
   stop_loss_pct: 5,
   take_profit_pct: 10,
+  trailing_drawdown_pct: 5,
   status: true
 });
 
@@ -117,6 +119,7 @@ watch(
     model.max_positions = or(e?.max_positions, 10);
     model.stop_loss_pct = or(e?.stop_loss_pct, 5);
     model.take_profit_pct = or(e?.take_profit_pct, 10);
+    model.trailing_drawdown_pct = or(e?.trailing_drawdown_pct, 5);
     model.status = or(e?.status, true);
   }
 );
@@ -141,6 +144,7 @@ async function handleSubmit() {
     max_positions: model.max_positions,
     stop_loss_pct: model.stop_loss_pct,
     take_profit_pct: model.take_profit_pct,
+    trailing_drawdown_pct: model.trailing_drawdown_pct,
     status: model.status
   };
   emit('submitted', { data, isEdit: isEdit.value, id: props.editing?.id });
@@ -194,6 +198,11 @@ async function handleSubmit() {
             </NInputNumber>
           </NFormItem>
         </NSpace>
+        <NFormItem :label="$t('page.aiStrategy.form.trailingDrawdown')" path="trailing_drawdown_pct">
+          <NInputNumber v-model:value="model.trailing_drawdown_pct" :min="0" :max="100">
+            <template #suffix>%</template>
+          </NInputNumber>
+        </NFormItem>
         <NFormItem :label="$t('page.aiStrategy.form.status')" path="status">
           <NSwitch v-model:value="model.status">
             <template #checked>{{ $t('page.aiStrategy.enabled') }}</template>

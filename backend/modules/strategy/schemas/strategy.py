@@ -48,6 +48,10 @@ class StrategyCreateRequest(BaseModel):
     max_positions: int = Field(10, ge=1, le=100, description="最大同时持仓数")
     stop_loss_pct: Optional[float] = Field(5.0, ge=0, le=100, description="默认止损比例(%)")
     take_profit_pct: Optional[float] = Field(10.0, ge=0, le=500, description="默认止盈比例(%)")
+    trailing_drawdown_pct: Optional[float] = Field(
+        5.0, ge=0, le=100,
+        description="回撤止盈比例(%)：现价自持仓期间最高价回撤超该值且仍浮盈时止盈离场，0或不填不启用",
+    )
     status: bool = Field(True, description="状态：True-启用，False-停用")
 
 
@@ -73,6 +77,7 @@ class StrategyItem(BaseModel):
     max_positions: int
     stop_loss_pct: Optional[float] = None
     take_profit_pct: Optional[float] = None
+    trailing_drawdown_pct: Optional[float] = None
     status: bool
     last_executed_at: Optional[datetime] = None
     created_at: Optional[datetime] = None
@@ -133,6 +138,8 @@ class PositionItem(BaseModel):
     quantity: int
     target_sell_price: Optional[float] = None
     stop_loss_price: Optional[float] = None
+    trailing_drawdown_pct: Optional[float] = None
+    peak_price: Optional[float] = None
     status: str
     latest_price: Optional[float] = None
     floating_pnl_pct: Optional[float] = None

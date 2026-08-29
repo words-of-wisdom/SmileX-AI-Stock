@@ -315,6 +315,7 @@ METHOD \n PATH \n timestamp \n nonce \n app_id \n sha256(body).hexdigest()
 - 策略 CRUD：`GET/POST /strategies`、`PUT/DELETE /strategies/{id}`，分页查询走统一分页结构；`execute_periods` 为 JSON 数组（`pre_market/morning/noon/tail/post_close`），`stock_pool` 为 `{codes: string[]}`（空则 AI 全市场自选）
 - 2026-08-17 新增策略分类：`category` 字符串（`pre_market_auction/noon/tail/blue_chip/general`，自建默认 `general`）+ `is_preset` bool（系统预置标记）；列表接口新增 `category` 过滤参数；迁移 0016 预置 10 条策略（默认停用，允许编辑/删除），蓝筹白马两类带固定股票池
 - 2026-08-18 执行异步化 + 信号由交易引擎执行：`POST /strategies/{id}/run` 改为异步提交（毫秒级返回 `{run_id, status: "running"}`，LLM 分析在后台任务中进行，同策略并发守卫错误码 11508）；执行记录 `GET /strategies/{id}/runs` 的 `status` 由 bool 改为字符串三态 `running/success/failed`，`opened_count/closed_count` 由交易引擎执行信号时累加（分析完成时为 0）；买卖信号落新表 `business_strategy_signal`（pending/executed/skipped/failed/expired），由每分钟任务 `strategy.trade_engine`（cron `* * * * * 9-15 * * mon-fri`）按新浪实时价执行模拟买卖 + 持仓跟踪（接管原 */5 `strategy.position_track`，已下线）；执行 user prompt 注入策略 `stop_loss_pct/take_profit_pct` 风控比例
+- 2026-08-29 回撤止盈（迁移 0025）：策略与创建/更新请求新增 `trailing_drawdown_pct`（0/不填=不启用，默认 5）；持仓响应新增 `trailing_drawdown_pct`（建仓时快照）与 `peak_price`（持仓期间最高价）；`sell_reason` 新增枚举值 `trailing_stop`（现价自峰值回撤超阈值且仍浮盈时平仓）；回撤达阈值一半时触发 AI 盘中复核（run_period=review）
 - 持仓：`GET /positions`（`strategy_id/status/stock_code` 过滤 + 分页，`status`: holding/closed/cancelled）、`POST /positions/track`（手动触发跟踪）、`POST /positions/{id}/close`（手动平仓，body `{price?, reason?}`）、`GET /positions/{id}/tracks`、`GET /positions/stats`
 - Agent 工具新增（策略/对话共用）：`get_index_history`（指数日 K 线）、`get_index_constituents`（沪深300/中证500 成分股，数据来自 BaoStock 同步任务 `stock.constituent_sync`，每交易日 17:10）
 - 金额/比例均为 `number`（后端 Numeric → float），百分比数值不带 `%`；时间字段带时区 datetime
@@ -331,3 +332,33 @@ METHOD \n PATH \n timestamp \n nonce \n app_id \n sha256(body).hexdigest()
 - 定时任务 `analysis.auto_generate`（cron `5 16 * * mon-fri`，收盘行情同步后）自动生成两类分析，同日同类型已有记录则跳过；手动触发不受同日去重限制
 - 菜单：`ai_market-analysis`（大盘分析）/`ai_sector-analysis`（板块分析），挂 AI 目录（8001）下 sort 4/5，迁移 0021（含 4 个 BUTTON 行承载 `analysis:list`/`analysis:run`，MENU 行的 permission 码仅展示用——`require_permission` 只校验 BUTTON 类型）
 - 前端 API：`src/service/api/analysis.ts`，类型 `Api.Analysis.*`（`src/typings/api/analysis.d.ts`）；指数/资金流/板块排行复用 `stock-market.ts`/`stock-board.ts` 现有接口；共用报告面板 `src/views/ai/components/analysis-report-panel.vue`（最新记录 `running` 时 5s 轮询 `latest`，完成即停）
+
+---
+
+## 每日资讯分析 / 宏观指数 / 财报解读 契约（2026-08-29，迁移 0026）
+
+### 每日资讯分析（analysis 模块扩展 news 类型）
+
+- `analysis_type` 新增 `news`（每日资讯分析）；`session` 新增 `weekly`（周度复盘）。**类型×时段合法组合**：news 仅 `morning/weekly`，market/sector 仅 `close/morning`，非法组合错误码 11601
+- 复用现有 analysis 全部接口（`/run`、`/latest`、`/runs`、`/runs/{id}`、config），无新表；morning 取近 24h 资讯 60 条、weekly 取近 7 天 120 条，注入中美宏观指数读数
+- `parsed_result` 为 `{macro_industry_news: [{title, category, viewpoint, impact, source}], stock_news: [{title, stock_name, viewpoint, impact, source}], summary, key_points[]}`，两个分类数组各 ≤10 条
+- 定时任务：`analysis.news_morning_generate`（cron `25,40 9 * * mon-fri`）、`analysis.news_weekly_generate`（cron `30,50 20 * * sun`，APScheduler 星期必须写 `sun`），同日去重逻辑与大盘/板块一致
+- 菜单 `ai_news-analysis`（每日资讯分析），权限复用 `analysis:list`/`analysis:run`；前端 `views/ai/news-analysis/index.vue` 复用 `analysis-report-panel.vue`（news 类型渲染两个分类列表卡片，策略抽屉隐藏研判开关）
+
+### 宏观指数（macro 新模块）
+
+- 前缀 `/admin/macro`；权限码 `macro:list`（查询）、`macro:sync`（手动同步）；指标查询参数非法错误码 11621
+- 接口：`GET /macro/indicators?country=CN|US&indicator=cpi|ppi|m0|m1|m2&limit`（period 升序序列，供图表）、`GET /macro/indicators/latest`（每个国家×指标最新一期）、`POST /macro/sync`（手动触发 akshare 抓取 + upsert，返回 `{sources, saved}`）
+- 新表 `business_macro_indicator`：`country+indicator_code+period` 唯一 upsert；金额/增速均为 number
+- 定时任务 `macro.sync_all`（cron `30 7 * * *`）；数据源 akshare：中国 `macro_china_cpi_monthly/macro_china_ppi_yearly/macro_china_money_supply`、美国 `macro_usa_cpi_monthly`
+- **注入 AI 分析**：market（close/morning）与 news 分析的 user prompt 注入中美 CPI/PPI/M1/M2 最新读数独立段，LLM 调用失败时随资讯段一起摘除降级重试
+- 菜单 `ai_macro`（宏观指数）；前端 `views/ai/macro/index.vue`（中美 tab + 指标卡片 + ECharts 走势）
+
+### 企业财报解读（financial 新模块）
+
+- 前缀 `/admin/financial`；权限码 `financial:list`（查询）、`financial:run`（触发解读）；错误码 11641-11644（report_not_found / report_fetch_failed / interpret_not_found / already_running）
+- 接口：`GET /financial/reports/{stock_code}?limit`（库内财报指标，report_period 倒序）、`POST /financial/interpretations/{stock_code}`（异步提交解读：库内无财报自动补抓，返回 `{interpretation_id, status: "running"}`，同股票并发守卫 11644）、`GET /financial/interpretations?page&page_size&stock_code`（分页记录）、`GET /financial/interpretations/detail/{id}`（详情含报告原文）
+- `parsed_result` 为 `{quality_rating, highlights[], risks[], forecast: {direction, summary}}`；`status` 三态 `running/success/failed`；`trigger_type`: `schedule`（持仓自动）/`manual`
+- 新表 `business_financial_report`（`stock_code+report_period` 唯一）与 `business_financial_interpretation`；数据源 akshare `stock_financial_analysis_indicator`（新浪财务指标，白名单列名容错匹配）
+- 定时任务 `financial.auto_interpret`（cron `0 8 * * mon-fri`）：持仓 + 近30天策略信号标的，补抓财报后对最新报告期无成功解读的个股自动提交解读（同报告期去重）
+- 菜单 `ai_financial-analysis`（财报分析）；前端 `views/ai/financial-analysis/index.vue`（代码查询 + 解读报告 + 指标表 + 历史列表）

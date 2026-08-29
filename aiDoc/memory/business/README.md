@@ -10,6 +10,8 @@
 
 ## 需求索引
 
+- [2026-08-29 每日资讯分析+宏观指数+财报解读](./2026-08-29_news_analysis_macro_financial.md) — analysis 扩展 news 类型（morning 早盘/weekly 周日晚，宏观行业与个股资讯各≤10条分类解读）；新模块 macro（中美 CPI/PPI/M1/M2，akshare 每日同步 upsert + 注入大盘/资讯 AI 分析）与 financial（新浪财务指标抓取 + AI 解读预测，持仓+近30天信号标的工作日 08:00 自动解读）；迁移 0026 三新表 + 三菜单（news 复用 analysis 权限）；坑：MappedAsDataclass 新表无默认值字段须在前、APScheduler 星期字段写 `sun`、菜单迁移逐行 insert 防 bulk_insert 首行丢值
+
 - [2026-08-28 持仓跟踪筛选/排序/滚动改造 + 亏损归因](./2026-08-28_position_tracking_filters_and_loss_diagnosis.md) — 持仓 Tab 修无法滚动（flex-height+remote+h-full flex 链）；GET /positions 加 start_time/end_time（按 buy_time）+ sort_by/sort_desc（pnl/return_rate/buy_time/sell_time 白名单，nulls_last）；前端策略 NSelect（独立全量加载选项）+ datetimerange + 列排序走服务端。亏损归因：执行价格实时无延迟（新浪直拉），嫌疑主因是**信号生成读昨日收盘快照**（盘中 AI 看过期大盘/板块/涨停数据）+ **T+1 当日不可止损**结构性缺口
 
 - [2026-08-21 开盘后大盘/板块AI分析显示昨日数据](./2026-08-21_analysis_morning_stale_data.md) — 三层根因：①早盘任务当天 11 点后才部署（9:20 未跑）②morning 注入近24h资讯原文命中 MiniMax 内容审核 422（`input new_sensitive`）整单失败无降级③任务去重含 failed 且 cron 单点触发 → 当天失败全天缺报告。修复：资讯段从数据收集函数抽出独立注入 + LLM 首败摘资讯降级重试一次（注明消息面缺失）；去重改 `status.in_(success/running)` + cron 补跑点（morning `20,35 9`、close `5,25 16`）；顺带修 `strategy.trade_engine` cron 误写 8 字段致 job 从未注册（`_build_trigger` 静默吞错，交易引擎上线以来从未执行过）。坑：cron 定义以代码为准（启动时 `sync_registry_to_db` 覆盖 DB）

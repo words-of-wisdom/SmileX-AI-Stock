@@ -433,3 +433,12 @@ stock:
   no_data: "No market data available"
   index_not_found: "Index {code} not found"
   board_not_found: "Board {code} not found"
+
+macro:
+  indicator_invalid: "Invalid macro indicator query"
+
+financial:
+  report_not_found: "Financial report not found"
+  report_fetch_failed: "Failed to fetch financial report"
+  interpret_not_found: "Financial interpretation not found"
+  already_running: "Financial interpretation already running"

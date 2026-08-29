@@ -255,6 +255,8 @@ class TradeEngine:
                     buy_reason=sig.reason,
                     target_sell_price=target_sell,
                     stop_loss_price=stop_loss,
+                    trailing_drawdown_pct=strategy.trailing_drawdown_pct,
+                    peak_price=price,
                     status="holding",
                     latest_price=price,
                     floating_pnl_pct=0.0,

@@ -15,5 +15,7 @@ export * from './stock-limit-up';
 export * from './block-trade';
 export * from './strategy';
 export * from './analysis';
+export * from './macro';
+export * from './financial';
 export * from './agent-chat';
 export * from './demo';

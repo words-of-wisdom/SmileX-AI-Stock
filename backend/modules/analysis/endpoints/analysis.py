@@ -22,8 +22,8 @@ from modules.analysis.services.analysis_config_service import AnalysisConfigServ
 from modules.analysis.schemas.analysis import (
     ANALYSIS_TYPES,
     ANALYSIS_TYPE_NAMES,
-    SESSION_TYPES,
     SESSION_TYPE_NAMES,
+    VALID_TYPE_SESSIONS,
     AnalysisConfigItem,
     AnalysisConfigUpdateRequest,
     AnalysisRunDetailItem,
@@ -37,7 +37,7 @@ analysis_router = APIRouter(prefix="", tags=["AI助手/大盘板块分析"])
 
 
 def _validate_analysis_type(analysis_type: str) -> str:
-    """校验分析类型：market-大盘，sector-板块"""
+    """校验分析类型：market-大盘，sector-板块，news-每日资讯"""
     if analysis_type not in ANALYSIS_TYPES:
         raise CustomError(
             error=CustomErrorCode.ANALYSIS_TYPE_INVALID,
@@ -46,12 +46,14 @@ def _validate_analysis_type(analysis_type: str) -> str:
     return analysis_type
 
 
-def _validate_session(session: str) -> str:
-    """校验分析时段：close-收盘分析（默认），morning-早盘分析"""
-    if session not in SESSION_TYPES:
+def _validate_session(analysis_type: str, session: str) -> str:
+    """校验类型×时段合法组合：news 仅支持 morning/weekly，market/sector 仅支持 close/morning"""
+    valid_sessions = VALID_TYPE_SESSIONS.get(analysis_type, ())
+    if session not in valid_sessions:
         raise CustomError(
             error=CustomErrorCode.ANALYSIS_TYPE_INVALID,
-            msg=f"分析时段非法，仅支持 {'/'.join(SESSION_TYPE_NAMES.values())}",
+            msg=f"分析时段非法，「{ANALYSIS_TYPE_NAMES.get(analysis_type, analysis_type)}」"
+                f"仅支持 {'/'.join(SESSION_TYPE_NAMES[s] for s in valid_sessions)}",
         )
     return session
 
@@ -74,14 +76,14 @@ def _page_data(records, page, page_size, total):
 )
 async def run_analysis(
     analysis_type: str,
-    session: str = Query("close", description="分析时段：close-收盘分析，morning-早盘分析"),
+    session: str = Query("close", description="分析时段：close-收盘分析，morning-早盘分析，weekly-周度复盘（仅资讯分析）"),
     user=Depends(current_user),
     db: AsyncSession = Depends(get_session),
 ):
     """手动生成分析：创建执行记录后立即返回，LLM 在后台生成，
     前端轮询 latest 或 runs 接口查看进度与结果"""
     _validate_analysis_type(analysis_type)
-    _validate_session(session)
+    _validate_session(analysis_type, session)
     run_id = await AnalysisExecutor.submit_run(
         db, analysis_type, trigger_type="manual", session=session,
     )
@@ -102,12 +104,12 @@ async def run_analysis(
 )
 async def get_analysis_config(
     analysis_type: str,
-    session: str = Query("close", description="分析时段：close-收盘分析，morning-早盘分析"),
+    session: str = Query("close", description="分析时段：close-收盘分析，morning-早盘分析，weekly-周度复盘（仅资讯分析）"),
     user=Depends(current_user),
     db: AsyncSession = Depends(get_session),
 ):
     _validate_analysis_type(analysis_type)
-    _validate_session(session)
+    _validate_session(analysis_type, session)
     config = await AnalysisConfigService.get_effective(db, analysis_type, session)
     return response_base.success(data=config)
 
@@ -121,12 +123,12 @@ async def get_analysis_config(
 async def update_analysis_config(
     analysis_type: str,
     req: AnalysisConfigUpdateRequest,
-    session: str = Query("close", description="分析时段：close-收盘分析，morning-早盘分析"),
+    session: str = Query("close", description="分析时段：close-收盘分析，morning-早盘分析，weekly-周度复盘（仅资讯分析）"),
     user=Depends(current_user),
     db: AsyncSession = Depends(get_session),
 ):
     _validate_analysis_type(analysis_type)
-    _validate_session(session)
+    _validate_session(analysis_type, session)
     config = await AnalysisConfigService.update_config(db, analysis_type, req, session)
     return response_base.success(data=config, msg="保存成功，下次生成分析时生效")
 
@@ -142,12 +144,12 @@ async def update_analysis_config(
 )
 async def get_latest_analysis(
     analysis_type: str,
-    session: str = Query("close", description="分析时段：close-收盘分析，morning-早盘分析"),
+    session: str = Query("close", description="分析时段：close-收盘分析，morning-早盘分析，weekly-周度复盘（仅资讯分析）"),
     user=Depends(current_user),
     db: AsyncSession = Depends(get_session),
 ):
     _validate_analysis_type(analysis_type)
-    _validate_session(session)
+    _validate_session(analysis_type, session)
     result = await db.execute(
         select(BusinessAnalysisRun)
         .where(
@@ -174,12 +176,12 @@ async def get_analysis_runs(
     analysis_type: str,
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
-    session: str = Query("close", description="分析时段：close-收盘分析，morning-早盘分析"),
+    session: str = Query("close", description="分析时段：close-收盘分析，morning-早盘分析，weekly-周度复盘（仅资讯分析）"),
     user=Depends(current_user),
     db: AsyncSession = Depends(get_session),
 ):
     _validate_analysis_type(analysis_type)
-    _validate_session(session)
+    _validate_session(analysis_type, session)
     conditions = [
         BusinessAnalysisRun.analysis_type == analysis_type,
         BusinessAnalysisRun.session == session,

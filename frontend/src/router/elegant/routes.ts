@@ -135,6 +135,24 @@ export const generatedRoutes: GeneratedRoute[] = [
         }
       },
       {
+        name: 'ai_financial-analysis',
+        path: '/ai/financial-analysis',
+        component: 'view.ai_financial-analysis',
+        meta: {
+          title: 'ai_financial-analysis',
+          i18nKey: 'route.ai_financial-analysis'
+        }
+      },
+      {
+        name: 'ai_macro',
+        path: '/ai/macro',
+        component: 'view.ai_macro',
+        meta: {
+          title: 'ai_macro',
+          i18nKey: 'route.ai_macro'
+        }
+      },
+      {
         name: 'ai_market-analysis',
         path: '/ai/market-analysis',
         component: 'view.ai_market-analysis',
@@ -150,6 +168,15 @@ export const generatedRoutes: GeneratedRoute[] = [
         meta: {
           title: 'ai_model',
           i18nKey: 'route.ai_model'
+        }
+      },
+      {
+        name: 'ai_news-analysis',
+        path: '/ai/news-analysis',
+        component: 'view.ai_news-analysis',
+        meta: {
+          title: 'ai_news-analysis',
+          i18nKey: 'route.ai_news-analysis'
         }
       },
       {

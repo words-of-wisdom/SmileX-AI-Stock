@@ -418,6 +418,9 @@ const local: App.I18n.Schema = {
     ai_analysis: 'AI Analysis',
     'ai_market-analysis': 'Market Analysis',
     'ai_sector-analysis': 'Sector Analysis',
+    'ai_news-analysis': 'Daily News Analysis',
+    'ai_financial-analysis': 'Financial Reports',
+    ai_macro: 'Macro Indicators',
     about: 'About',
     demo: 'Example',
     demo_upload: 'Upload Demo',
@@ -1450,6 +1453,7 @@ const local: App.I18n.Schema = {
       reasonStopLoss: 'Stop Loss',
       reasonTakeProfit: 'Take Profit',
       reasonTarget: 'Target Hit',
+      reasonTrailingStop: 'Trailing Stop',
       reasonAi: 'AI Signal',
       reasonManual: 'Manual',
       form: {
@@ -1467,6 +1471,7 @@ const local: App.I18n.Schema = {
         maxPositions: 'Max Positions',
         stopLoss: 'Stop Loss(%)',
         takeProfit: 'Take Profit(%)',
+        trailingDrawdown: 'Trailing Drawdown(%)',
         status: 'Enabled',
         tip: 'Strategy runs automatically at selected periods, or manually'
       }
@@ -1546,7 +1551,37 @@ const local: App.I18n.Schema = {
         risingFallingCol: 'Rise/Fall',
         leadingStockCol: 'Leading Stock'
       }
-    }
+    },
+    macro: {
+      title: 'Macro Indicators',
+      subtitle: 'CN / US CPI, PPI, M1, M2 and more; injected into AI analysis after sync',
+      countryCN: 'China',
+      countryUS: 'United States',
+      mom: 'MoM',
+      syncBtn: 'Sync',
+      syncDone: 'Macro indicators synced',
+      historyTitle: 'History Trend',
+      emptyTip: 'No macro data yet, click "Sync" to fetch'
+    },
+    financial: {
+      title: 'Financial Report Analysis',
+      subtitle: 'Enter a stock code to fetch key metrics and get AI interpretation & forecast',
+      codePlaceholder: 'Enter 6-digit stock code, e.g. 000001',
+      codeInvalid: 'Please enter a valid stock code',
+      queryBtn: 'Query',
+      interpretBtn: 'AI Interpret',
+      interpretSubmitted: 'Interpretation submitted, running in background',
+      reportTitle: 'AI Financial Report',
+      metricsTitle: 'Key Financial Metrics',
+      historyTitle: 'Interpretations (incl. scheduled for holdings)',
+      stockCol: 'Stock',
+      periodCol: 'Report Period',
+      ratingLabel: 'Quality',
+      forecastLabel: 'Next Period Forecast',
+      highlightsLabel: 'Highlights',
+      risksLabel: 'Risks',
+      emptyTip: 'No interpretation yet, enter a stock code and click "AI Interpret"'
+    },
   },
   form: {
     required: 'Cannot be empty',

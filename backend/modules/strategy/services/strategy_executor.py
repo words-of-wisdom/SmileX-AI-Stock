@@ -233,9 +233,16 @@ def _build_user_prompt(
         for h in holdings:
             cur = realtime_quotes.get(h.stock_code) if realtime_quotes else None
             chg = f"{(cur / float(h.buy_price) - 1) * 100:+.1f}%" if cur else "未知"
+            # 回撤止盈上下文：持仓期间峰值与距峰值的回撤幅度
+            trail = ""
+            if h.peak_price is not None and h.trailing_drawdown_pct is not None and cur:
+                peak = float(h.peak_price)
+                dd = (peak - cur) / peak * 100 if peak > 0 else 0.0
+                trail = (f"，持仓峰值 {peak:g}（距峰值 {dd:+.1f}%，"
+                         f"回撤止盈线 {float(h.trailing_drawdown_pct):g}%）")
             hold_lines.append(
                 f"- {h.stock_code} {h.stock_name}：买价 {h.buy_price}，"
-                f"现价相对买价 {chg}，"
+                f"现价相对买价 {chg}{trail}，"
                 f"预估卖点 {h.target_sell_price or '无'}，止损价 {h.stop_loss_price or '无'}"
             )
         parts.append("当前持仓（对已持仓个股请重点评估是否卖出/调整卖点，action=sell 或 adjust）：\n" + "\n".join(hold_lines))
@@ -252,9 +259,10 @@ def _build_user_prompt(
 
     if is_review:
         parts.append(
-            "本轮为涨停保护触发的盘中持仓复核：重点评估涨停持仓是连板潜力保留（hold）、"
-            "上移卖点锁定利润（adjust），还是炸板/滞涨/尾盘走弱兑现离场（sell）；"
-            "除非出现极高把握的机会，本轮不要给出新买入信号。"
+            "本轮为涨停保护或浮盈回撤预警触发的盘中持仓复核：重点评估已持仓个股是"
+            "保留（hold）、上移卖点/止损锁定利润（adjust），还是炸板/滞涨/冲高回落/"
+            "尾盘走弱兑现离场（sell）；若现价距持仓峰值回撤已接近或超过回撤止盈线，"
+            "优先考虑 sell 或上移止损保护利润；除非出现极高把握的机会，本轮不要给出新买入信号。"
         )
 
     parts.append("请基于工具获取的最新真实数据，输出 JSON 信号数组。")

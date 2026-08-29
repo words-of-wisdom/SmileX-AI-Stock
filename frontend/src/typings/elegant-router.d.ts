@@ -30,8 +30,11 @@ declare module "@elegant-router/types" {
     "ai": "/ai";
     "ai_analysis": "/ai/analysis";
     "ai_chat": "/ai/chat";
+    "ai_financial-analysis": "/ai/financial-analysis";
+    "ai_macro": "/ai/macro";
     "ai_market-analysis": "/ai/market-analysis";
     "ai_model": "/ai/model";
+    "ai_news-analysis": "/ai/news-analysis";
     "ai_sector-analysis": "/ai/sector-analysis";
     "business": "/business";
     "business_app-user": "/business/app-user";
@@ -144,8 +147,11 @@ declare module "@elegant-router/types" {
     | "about"
     | "ai_analysis"
     | "ai_chat"
+    | "ai_financial-analysis"
+    | "ai_macro"
     | "ai_market-analysis"
     | "ai_model"
+    | "ai_news-analysis"
     | "ai_sector-analysis"
     | "business_app-user"
     | "demo_dict"

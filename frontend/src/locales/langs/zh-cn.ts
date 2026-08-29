@@ -414,6 +414,9 @@ const local: App.I18n.Schema = {
     ai_analysis: 'AI 分析',
     'ai_market-analysis': '大盘分析',
     'ai_sector-analysis': '板块分析',
+    'ai_news-analysis': '每日资讯分析',
+    'ai_financial-analysis': '财报分析',
+    ai_macro: '宏观指数',
     about: '关于我们',
     demo: '示例',
     demo_upload: '上传演示',
@@ -1443,6 +1446,7 @@ const local: App.I18n.Schema = {
       reasonStopLoss: '止损',
       reasonTakeProfit: '止盈',
       reasonTarget: '达标卖出',
+      reasonTrailingStop: '回撤止盈',
       reasonAi: 'AI信号',
       reasonManual: '手动',
       form: {
@@ -1460,6 +1464,7 @@ const local: App.I18n.Schema = {
         maxPositions: '最大持仓数',
         stopLoss: '默认止损(%)',
         takeProfit: '默认止盈(%)',
+        trailingDrawdown: '回撤止盈(%)',
         status: '是否启用',
         tip: '策略将按所选时段自动执行，也可手动触发'
       }
@@ -1494,6 +1499,10 @@ const local: App.I18n.Schema = {
       todayOutlookLabel: '今日展望',
       sessionClose: '收盘分析',
       sessionMorning: '早盘分析',
+      sessionWeekly: '周度复盘',
+      macroNewsLabel: '宏观/行业资讯（≤10条）',
+      stockNewsLabel: '个股资讯（≤10条）',
+      newsSectionEmpty: '该分类暂无资讯',
       morningStrategyTitle: '早盘分析策略配置',
       strategyBtn: '分析策略',
       strategyTitle: '分析策略配置',
@@ -1539,7 +1548,37 @@ const local: App.I18n.Schema = {
         risingFallingCol: '涨/跌家数',
         leadingStockCol: '领涨股'
       }
-    }
+    },
+    macro: {
+      title: '宏观经济指数',
+      subtitle: '中美 CPI / PPI / M1 / M2 等核心指标，同步后自动注入 AI 分析',
+      countryCN: '中国',
+      countryUS: '美国',
+      mom: '环比',
+      syncBtn: '同步数据',
+      syncDone: '宏观指标同步完成',
+      historyTitle: '历史走势',
+      emptyTip: '暂无宏观数据，点击右上角「同步数据」抓取'
+    },
+    financial: {
+      title: '企业财报解读',
+      subtitle: '输入股票代码获取财报关键指标，AI 解读业绩质量并预测下一报告期',
+      codePlaceholder: '输入 6 位股票代码，如 000001',
+      codeInvalid: '请输入合法的股票代码',
+      queryBtn: '查询',
+      interpretBtn: 'AI 解读',
+      interpretSubmitted: '已提交解读，AI 在后台进行，完成后自动展示',
+      reportTitle: 'AI 财报解读报告',
+      metricsTitle: '财报关键指标',
+      historyTitle: '解读记录（含持仓股定时自动解读）',
+      stockCol: '股票',
+      periodCol: '报告期',
+      ratingLabel: '财报质量',
+      forecastLabel: '下期预测',
+      highlightsLabel: '核心亮点',
+      risksLabel: '风险点',
+      emptyTip: '暂无解读记录，输入股票代码点击「AI 解读」开始'
+    },
   },
   form: {
     required: '不能为空',

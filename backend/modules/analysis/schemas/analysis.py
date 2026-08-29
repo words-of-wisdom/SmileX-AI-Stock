@@ -10,19 +10,28 @@ from typing import Annotated, Optional
 from pydantic import BaseModel, ConfigDict, Field, BeforeValidator
 
 # 分析类型常量（菜单页与执行记录共用）
-ANALYSIS_TYPES = ("market", "sector")
+ANALYSIS_TYPES = ("market", "sector", "news")
 
 ANALYSIS_TYPE_NAMES = {
     "market": "大盘分析",
     "sector": "板块分析",
+    "news": "每日资讯分析",
 }
 
-# 分析时段常量（close-收盘分析 16:05，morning-早盘分析 9:20）
-SESSION_TYPES = ("close", "morning")
+# 分析时段常量（close-收盘分析 16:05，morning-早盘分析 9:20，weekly-周日晚周度复盘）
+SESSION_TYPES = ("close", "morning", "weekly")
 
 SESSION_TYPE_NAMES = {
     "close": "收盘分析",
     "morning": "早盘分析",
+    "weekly": "周度复盘",
+}
+
+# 类型×时段合法组合（news 仅支持 morning/weekly；market/sector 仅支持 close/morning）
+VALID_TYPE_SESSIONS = {
+    "market": ("close", "morning"),
+    "sector": ("close", "morning"),
+    "news": ("morning", "weekly"),
 }
 
 # query 参数解析：空串/非法值一律归为 None（不回退默认值，避免筛选静默吞记录）

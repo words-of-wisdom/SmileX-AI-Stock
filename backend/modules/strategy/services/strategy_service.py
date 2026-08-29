@@ -131,6 +131,7 @@ class StrategyService:
             max_positions=req.max_positions,
             stop_loss_pct=req.stop_loss_pct,
             take_profit_pct=req.take_profit_pct,
+            trailing_drawdown_pct=req.trailing_drawdown_pct or None,
             status=req.status,
         )
         db.add(strategy)
@@ -169,6 +170,7 @@ class StrategyService:
         strategy.max_positions = req.max_positions
         strategy.stop_loss_pct = req.stop_loss_pct
         strategy.take_profit_pct = req.take_profit_pct
+        strategy.trailing_drawdown_pct = req.trailing_drawdown_pct or None
         strategy.status = req.status
         await db.commit()
         await db.refresh(strategy)

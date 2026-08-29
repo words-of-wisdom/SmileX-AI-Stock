@@ -19,6 +19,10 @@ from .block_trade import (
     BusinessBlockTradeSyncLog,
 )
 
+from .macro import BusinessMacroIndicator
+
+from .financial import BusinessFinancialReport, BusinessFinancialInterpretation
+
 __all__ = [
     "AppUser",
     "BusinessNews",
@@ -32,4 +36,7 @@ __all__ = [
     "BusinessBlockTradeDaily",
     "BusinessBlockTradeActive",
     "BusinessBlockTradeSyncLog",
+    "BusinessMacroIndicator",
+    "BusinessFinancialReport",
+    "BusinessFinancialInterpretation",
 ]

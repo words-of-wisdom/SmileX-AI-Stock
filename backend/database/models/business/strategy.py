@@ -60,6 +60,10 @@ class BusinessAiStrategy(Base):
     take_profit_pct: Mapped[Optional[float]] = mapped_column(
         Numeric(8, 4), nullable=True, default=10.0, comment="默认止盈比例(%)，相对买价"
     )
+    trailing_drawdown_pct: Mapped[Optional[float]] = mapped_column(
+        Numeric(8, 4), nullable=True, default=5.0,
+        comment="回撤止盈比例(%)：现价自持仓期间最高价回撤超该值且仍浮盈时止盈离场",
+    )
     status: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=True, comment="状态：True-启用，False-停用"
     )
@@ -207,6 +211,13 @@ class BusinessStrategyPosition(Base):
     stop_loss_price: Mapped[Optional[float]] = mapped_column(
         Numeric(16, 4), nullable=True, default=None, comment="止损价"
     )
+    trailing_drawdown_pct: Mapped[Optional[float]] = mapped_column(
+        Numeric(8, 4), nullable=True, default=None,
+        comment="建仓时快照的策略回撤止盈比例(%)，空则不启用",
+    )
+    peak_price: Mapped[Optional[float]] = mapped_column(
+        Numeric(16, 4), nullable=True, default=None, comment="持仓期间最高价（回撤止盈基准）"
+    )
 
     status: Mapped[str] = mapped_column(
         String(20), nullable=False, default="holding",
@@ -231,7 +242,7 @@ class BusinessStrategyPosition(Base):
     )
     sell_reason: Mapped[Optional[str]] = mapped_column(
         String(500), nullable=True, default=None,
-        comment="卖出原因：stop_loss/take_profit/target_reached/ai_signal/manual",
+        comment="卖出原因：stop_loss/target_reached/trailing_stop/ai_signal/manual",
     )
     return_rate: Mapped[Optional[float]] = mapped_column(
         Numeric(10, 4), nullable=True, default=None, comment="最终收益率(%)，平仓时计算"

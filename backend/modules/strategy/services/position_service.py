@@ -95,9 +95,19 @@ class PositionService:
             pos.latest_price = price
             pos.floating_pnl_pct = pnl_pct
             pos.tracked_at = now
+            # 回撤止盈基准：滚动刷新持仓期间最高价
+            peak = max(float(pos.peak_price) if pos.peak_price is not None else price, price)
+            pos.peak_price = peak
+            trailing_pct = (float(pos.trailing_drawdown_pct)
+                            if pos.trailing_drawdown_pct is not None else None)
+            # 距最高价回撤幅度(%)：未启用回撤止盈时不计算
+            drawdown_pct = (
+                round((peak - price) / peak * 100, 4)
+                if trailing_pct is not None and peak > 0 else None
+            )
             tracked += 1
 
-            # ---- 触发条件判断：止损 / 止盈 / 达到预估卖点（T+1：当日买入不可卖） ----
+            # ---- 触发条件判断：止损 / 止盈 / 达到预估卖点 / 回撤止盈（T+1：当日买入不可卖） ----
             sell_reason = None
             if not is_t1_locked(pos.buy_time, now):
                 if pos.stop_loss_price and price <= float(pos.stop_loss_price):
@@ -120,6 +130,26 @@ class PositionService:
                         ))
                         continue
                     sell_reason = "target_reached"
+                elif (
+                    drawdown_pct is not None
+                    and drawdown_pct >= trailing_pct
+                    and price > buy_price
+                ):
+                    # 回撤止盈：未到目标价但自最高价回撤超阈值且仍浮盈（跌破买价交由止损线处理）
+                    sell_reason = "trailing_stop"
+                elif drawdown_pct is not None and drawdown_pct >= trailing_pct / 2:
+                    # 预警线：回撤已达阈值一半但未触发机械止盈，交 AI 复核兜底
+                    # （AI 可提前 sell / adjust 上移止损保利润 / hold）
+                    review_strategy_ids.add(pos.strategy_id)
+                    db.add(BusinessPositionTrackLog(
+                        position_id=pos.id, track_time=now,
+                        latest_price=price, pnl_pct=pnl_pct,
+                        adjust_reason=(
+                            f"冲高回落{drawdown_pct:.1f}%（峰值{peak}），"
+                            f"接近回撤止盈线{trailing_pct}%，触发AI复核"
+                        ),
+                    ))
+                    continue
 
             if sell_reason:
                 pos.status = "closed"

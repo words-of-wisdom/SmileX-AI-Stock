@@ -10,6 +10,8 @@
 
 详细索引见 [business/README.md](./business/README.md)。近期：
 
+- [2026-08-29 每日资讯分析+宏观指数+财报解读](./business/2026-08-29_news_analysis_macro_financial.md) — analysis 加 news 类型（morning/weekly，宏观/行业与个股各≤10条）+ 新模块 macro（中美 CPI/PPI/M1/M2，akshare→upsert，注入大盘/资讯分析）与 financial（新浪财务指标→AI 解读预测，持仓+信号标的定时自动）；迁移 0026 三新表+三菜单；坑：MappedAsDataclass 字段顺序（无默认在前）、APScheduler 星期写 `sun`
+- [2026-08-29 动态止盈：回撤止盈 + AI 复核兜底](./business/2026-08-29_trailing_stop_take_profit.md) — 持仓峰值回撤超策略阈值（trailing_drawdown_pct，建仓快照）且仍浮盈→trailing_stop 平仓；回撤达半阈值触发 AI review 复核兜底；迁移 0025 加三列（存量持仓回填峰值/快照）
 - [2026-08-28 持仓跟踪筛选/排序/滚动改造 + 亏损归因](./business/2026-08-28_position_tracking_filters_and_loss_diagnosis.md) — 持仓 Tab 滚动修复 + 策略/时间段筛选 + 服务端盈亏排序；亏损根因分析：执行价格实时无延迟，嫌疑主因=信号生成读昨日收盘快照 + T+1 当日不可止损
 - [2026-08-19 AI分析目录新增大盘/板块分析菜单](./business/2026-08-19_market_sector_analysis_menu.md) — 新模块 `modules/analysis/`（/admin/analysis）+ 新表 `business_analysis_run`：大盘/板块 AI 分析落库型异步生成（三态 status + 并发守卫 11603），数据注入 prompt 单轮生成（场景 TREND_PREDICTION，不走 ReAct）；定时任务 `analysis.auto_generate` 16:05 收盘数据同步后自动生成（同日去重）；菜单 8012/8013 挂 AI 目录（name 须与 elegant-router 逐字一致），BUTTON 权限共享 `analysis:list`/`analysis:run`；前端两页面 + 共用报告面板组件（轮询+markdown 渲染+历史抽屉）；**0022 追加分析策略配置+明日研判**：`business_analysis_config`（策略提示词+明日研判开关），策略按钮在历史记录旁，研判数据增强（上证近10日/近3日行业榜对比）；坑：可空 data 接口 response_model 须 `ResponseModel[X | None]`
 - [2026-08-18 策略执行异步化 + 每分钟模拟交易引擎](./business/2026-08-18_strategy_async_run_and_trade_engine.md) — 修手动执行超时：`/run` 改异步提交（running 记录落库即返回，LLM 后台分析 + 600s 兜底 + 僵死恢复）；分析只产出待执行信号（新表 business_strategy_signal），新任务 `strategy.trade_engine` 每分钟按新浪实时价执行模拟买卖 + 持仓跟踪（接管下线的 */5 position_track）；run.status bool→三态字符串（迁移 0020）

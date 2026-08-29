@@ -57,6 +57,12 @@ _SECTOR_TREND_TOP_N = 5
 _NEWS_HOURS = 24
 _NEWS_LIMIT = 30
 
+# 资讯分析（news 类型）：morning 取近 24h，weekly 取近 7 天；素材条数（供 LLM 筛选到各分类 ≤10 条）
+_NEWS_ANALYSIS_HOURS = 24
+_NEWS_ANALYSIS_WEEKLY_HOURS = 24 * 7
+_NEWS_ANALYSIS_LIMIT = 60
+_NEWS_ANALYSIS_WEEKLY_LIMIT = 120
+
 # 后台任务强引用集合（防止 asyncio.Task 被 GC），完成后自动移除
 _BACKGROUND_TASKS: set[asyncio.Task] = set()
 
@@ -240,8 +246,99 @@ _SECTOR_MORNING_SECTION = """
 """
 
 
+# ------------------------------------------------------------------
+# 每日资讯分析（news 类型）：数据 = 近24h（morning）/近7天（weekly）聚合资讯 + 宏观指数，
+# 输出分「宏观/行业」与「个股」两组分类要点，各不超过 10 条
+# ------------------------------------------------------------------
+_NEWS_MORNING_SYSTEM_PROMPT = """你是 SmileX-AI-Stock 平台的 AI 资讯分析师，负责在每个交易日早盘（9:20）对近24小时财经资讯进行分类解读。
+
+我会直接提供近24小时聚合抓取的真实财经资讯列表与中美宏观指数最新读数，禁止凭空编造资讯，解读必须基于所给素材。
+
+输出要求（严格按以下顺序，两部分缺一不可）：
+1. 先输出一个 JSON 对象（包在 ```json 代码块中）：
+```json
+{
+  "macro_industry_news": [           // 宏观经济与行业资讯，最多 10 条，按影响力降序
+    {
+      "title": "资讯标题（可合并同类）",
+      "category": "宏观政策",        // 宏观政策/央行动向/海外宏观/行业产业 之一
+      "viewpoint": "核心事实与解读，60 字以内",
+      "impact": "利好",              // 利好 / 利空 / 中性，并注明影响对象（如A股整体/某行业）
+      "source": "财联社"
+    }
+  ],
+  "stock_news": [                    // 个股资讯，最多 10 条，按影响力降序
+    {
+      "title": "资讯标题",
+      "stock_name": "XX公司",        // 关联个股/公司，无法定位时写"多公司"
+      "viewpoint": "核心事实与解读，60 字以内",
+      "impact": "利好",              // 利好 / 利空 / 中性
+      "source": "东方财富"
+    }
+  ],
+  "summary": "一句话资讯面总评",      // 30 字以内
+  "key_points": ["要点1", "要点2"]   // 3-5 条核心观察
+}
+```
+2. 再输出完整的 markdown 资讯分析报告，结构建议：
+   ## 资讯面总览（消息面整体倾向）
+   ## 宏观与行业资讯解读（分类点评，与宏观指数最新读数相互印证）
+   ## 个股资讯解读（重点公司事件与影响）
+   ## 今日观察要点（值得跟踪的发酵线索与风险提示）
+
+筛选纪律：相似资讯必须合并为一条；与A股关联弱、纯情绪化的资讯直接忽略；两组各严格不超过 10 条。
+报告使用中文，条理清晰，总长度控制在 800 字以内。不构成投资建议的免责声明无需输出。
+"""
+
+_NEWS_WEEKLY_SYSTEM_PROMPT = """你是 SmileX-AI-Stock 平台的 AI 资讯分析师，负责在周日晚对本周（近7天）财经资讯做周度复盘。
+
+我会直接提供近7天聚合抓取的真实财经资讯列表与中美宏观指数最新读数，禁止凭空编造资讯，解读必须基于所给素材。
+
+输出要求（严格按以下顺序，两部分缺一不可）：
+1. 先输出一个 JSON 对象（包在 ```json 代码块中）：
+```json
+{
+  "macro_industry_news": [           // 本周宏观经济与行业要闻，最多 10 条，按重要性降序
+    {
+      "title": "要闻标题（同类合并）",
+      "category": "宏观政策",        // 宏观政策/央行动向/海外宏观/行业产业 之一
+      "viewpoint": "本周核心事实与演化，80 字以内",
+      "impact": "利好",              // 利好 / 利空 / 中性，并注明影响对象
+      "source": "华尔街见闻"
+    }
+  ],
+  "stock_news": [                    // 本周个股要闻，最多 10 条，按重要性降序
+    {
+      "title": "要闻标题",
+      "stock_name": "XX公司",
+      "viewpoint": "本周核心事实与演化，80 字以内",
+      "impact": "利好 / 利空 / 中性",
+      "source": "同花顺"
+    }
+  ],
+  "summary": "一句话本周资讯面复盘",  // 30 字以内
+  "key_points": ["要点1", "要点2"]   // 3-5 条核心观察
+}
+```
+2. 再输出完整的 markdown 周度资讯复盘报告，结构建议：
+   ## 本周资讯面复盘（消息面主线梳理）
+   ## 宏观与行业要闻解读（政策与产业趋势，结合宏观指数变化）
+   ## 个股要闻解读（本周重点公司事件与后续演化）
+   ## 下周展望（值得跟踪的线索、事件日历与风险提示）
+
+筛选纪律：同类资讯按时间线合并为一条演化脉络；与A股关联弱的忽略；两组各严格不超过 10 条。
+报告使用中文，条理清晰，总长度控制在 1000 字以内。不构成投资建议的免责声明无需输出。
+"""
+
+
 def _build_system_prompt(analysis_type: str, session: str, include_tomorrow: bool) -> str:
     """按分析类型/时段与配置拼装系统提示词（研判章节按需追加）"""
+    if analysis_type == "news":
+        # 资讯分析：morning/weekly 两套提示词，不追加研判章节（明日展望融入要点）
+        return (
+            _NEWS_WEEKLY_SYSTEM_PROMPT if session == "weekly"
+            else _NEWS_MORNING_SYSTEM_PROMPT
+        )
     if analysis_type == "market":
         if session == "morning":
             prompt, section = _MARKET_MORNING_SYSTEM_PROMPT, _MARKET_MORNING_SECTION
@@ -298,14 +395,16 @@ def _dump_rows(items: list, fields: list[str]) -> list[dict]:
     return rows
 
 
-async def _collect_recent_news(db: AsyncSession) -> str:
-    """近24小时重点资讯收集：发布时间倒序取前 N 条（标题｜源｜摘要），
+async def _collect_recent_news(
+    db: AsyncSession, hours: int = _NEWS_HOURS, limit: int = _NEWS_LIMIT,
+) -> str:
+    """近期重点资讯收集：发布时间倒序取前 N 条（标题｜源｜摘要），
     无资讯时返回空串（不阻塞分析）"""
     from datetime import timedelta
 
     from database.models.business.news import BusinessNews
 
-    since = timezone.now() - timedelta(hours=_NEWS_HOURS)
+    since = timezone.now() - timedelta(hours=hours)
     result = await db.execute(
         select(BusinessNews)
         .where(
@@ -313,7 +412,7 @@ async def _collect_recent_news(db: AsyncSession) -> str:
             BusinessNews.deleted_at.is_(None),
         )
         .order_by(BusinessNews.published_at.desc())
-        .limit(_NEWS_LIMIT)
+        .limit(limit)
     )
     rows = result.scalars().all()
     if not rows:
@@ -328,10 +427,94 @@ async def _collect_recent_news(db: AsyncSession) -> str:
                 line += f"：{summary[:80]}"
         lines.append(line)
     return (
-        f"近 {_NEWS_HOURS} 小时重点财经资讯（共 {len(lines)} 条，先按影响力分级"
+        f"近 {hours} 小时重点财经资讯（共 {len(lines)} 条，先按影响力分级"
         "（宏观政策/央行动向 > 行业产业政策 > 个股与突发事件），"
         "相似资讯合并解读、与市场关联弱的忽略，评估影响时必须引用原文）：\n" + "\n".join(lines)
     )
+
+
+# 注入 AI 分析的宏观指标（country, code）组合及展示名
+_MACRO_CONTEXT_CODES = (
+    ("CN", "cpi"), ("CN", "ppi"), ("CN", "m1"), ("CN", "m2"),
+    ("US", "cpi"), ("US", "core_cpi"),
+)
+_MACRO_NAMES = {
+    ("CN", "cpi"): "中国CPI同比",
+    ("CN", "ppi"): "中国PPI同比",
+    ("CN", "m1"): "中国M1同比",
+    ("CN", "m2"): "中国M2同比",
+    ("US", "cpi"): "美国CPI月率",
+    ("US", "core_cpi"): "美国核心CPI月率",
+}
+
+
+async def _collect_macro_context(db: AsyncSession) -> str:
+    """中美宏观指数最新读数收集（CPI/PPI/M1/M2），格式化为简洁文本段；
+    无数据时返回空串（不阻塞分析，该段为独立注入、LLM 失败时可摘除降级）"""
+    from database.models.business.macro import BusinessMacroIndicator
+
+    parts = []
+    for country, code in _MACRO_CONTEXT_CODES:
+        result = await db.execute(
+            select(BusinessMacroIndicator)
+            .where(
+                BusinessMacroIndicator.country == country,
+                BusinessMacroIndicator.indicator_code == code,
+                BusinessMacroIndicator.deleted_at.is_(None),
+            )
+            .order_by(BusinessMacroIndicator.period.desc())
+            .limit(2)
+        )
+        rows = result.scalars().all()
+        if not rows:
+            continue
+        name = _MACRO_NAMES.get((country, code), f"{country}-{code}")
+        segs = []
+        for r in rows:
+            val = r.yoy if r.yoy is not None else r.value
+            if val is None:
+                continue
+            seg = f"{r.period} {float(val):+.2f}%"
+            if r.mom is not None:
+                seg += f"（环比 {float(r.mom):+.2f}%）"
+            segs.append(seg)
+        if segs:
+            parts.append(f"{name}：{'，'.join(segs)}")
+    if not parts:
+        return ""
+    return (
+        "中美宏观指数最新读数（同比，最新期在前）：\n" + "；\n".join(parts)
+        + "\n（用于宏观背景判断，评估资讯与宏观环境的印证/背离）"
+    )
+
+
+async def _collect_news_analysis_data(db: AsyncSession, session: str) -> str:
+    """资讯分析（news 类型）数据收集：morning 取近 24h，weekly 取近 7 天"""
+    if session == "weekly":
+        hours, limit = _NEWS_ANALYSIS_WEEKLY_HOURS, _NEWS_ANALYSIS_WEEKLY_LIMIT
+        window = "本周（近 7 天）"
+    else:
+        hours, limit = _NEWS_ANALYSIS_HOURS, _NEWS_ANALYSIS_LIMIT
+        window = "近 24 小时"
+    news_prompt = ""
+    try:
+        news_prompt = await _collect_recent_news(db, hours=hours, limit=limit)
+    except Exception:
+        logger.warning("资讯分析素材获取失败", exc_info=True)
+
+    parts = [f"当前时间：{timezone.now().strftime('%Y-%m-%d %H:%M')}"]
+    if news_prompt:
+        # 复用 _collect_recent_news 的分级提示文案，替换窗口描述
+        news_prompt = news_prompt.replace(
+            f"近 {hours} 小时重点财经资讯", f"{window}重点财经资讯", 1
+        )
+        parts.append(news_prompt)
+    else:
+        parts.append(f"{window}资讯素材：暂无数据（可能尚未同步，请在报告中注明资讯面数据缺失）")
+    parts.append(
+        f"请基于以上{window}真实资讯与宏观指数读数，输出 JSON 摘要与 markdown 资讯分析报告。"
+    )
+    return "\n\n".join(parts)
 
 
 async def _collect_market_data(db: AsyncSession) -> str:
@@ -602,46 +785,59 @@ class AnalysisExecutor:
         config = await AnalysisConfigService.get_effective(db, analysis_type, session)
 
         # 2. 收集数据（部分数据源失败不阻塞，prompt 中会注明缺失）
-        if analysis_type == "market":
+        if analysis_type == "news":
+            data_prompt = await _collect_news_analysis_data(db, session)
+        elif analysis_type == "market":
             data_prompt = await _collect_market_data(db)
         else:
             data_prompt = await _collect_sector_data(db)
 
         # 近24小时资讯单独收集：外部内容不可控（可能命中 LLM 内容审核导致整单失败），
-        # 拼装为独立段，LLM 调用失败时可整体摘除降级重试；获取失败不阻塞
+        # 拼装为独立段，LLM 调用失败时可整体摘除降级重试；获取失败不阻塞。
+        # news 类型资讯已在 data_prompt 内，无需重复注入
         news_prompt = ""
-        try:
-            news_prompt = await _collect_recent_news(db)
-        except Exception:
-            logger.warning("近期资讯获取失败（不影响分析）", exc_info=True)
+        if analysis_type != "news":
+            try:
+                news_prompt = await _collect_recent_news(db)
+            except Exception:
+                logger.warning("近期资讯获取失败（不影响分析）", exc_info=True)
+
+        # 中美宏观指数读数：独立段注入（market/news），失败/无数据不阻塞，可摘除降级
+        macro_prompt = ""
+        if analysis_type in ("market", "news"):
+            try:
+                macro_prompt = await _collect_macro_context(db)
+            except Exception:
+                logger.warning("宏观指数读数获取失败（不影响分析）", exc_info=True)
 
         # 3. LLM 生成（系统提示词按时段/研判开关动态拼装）；
-        #    资讯段放最前（行情数据 prompt 以"请基于以上真实数据输出…"收尾）
+        #    资讯/宏观段放最前（行情数据 prompt 以"请基于以上真实数据输出…"收尾）
         system_prompt = _build_system_prompt(analysis_type, session, config.include_tomorrow)
 
         def _compose_user_prompt(with_news: bool) -> str:
-            if not with_news and news_prompt:
-                body = (
-                    "（注：近24小时资讯因故未注入，消息面数据缺失，请在报告中注明）\n\n"
-                    + data_prompt
+            segments = []
+            if with_news and news_prompt:
+                segments.append(news_prompt)
+            elif not with_news and news_prompt:
+                segments.append(
+                    "（注：近24小时资讯因故未注入，消息面数据缺失，请在报告中注明）"
                 )
-            elif news_prompt:
-                body = news_prompt + "\n\n" + data_prompt
-            else:
-                body = data_prompt
-            return _build_user_prompt(analysis_type, body, config)
+            if with_news and macro_prompt:
+                segments.append(macro_prompt)
+            segments.append(data_prompt)
+            return _build_user_prompt(analysis_type, "\n\n".join(segments), config)
 
         try:
             raw_text = await _run_llm(
                 db, analysis_type, system_prompt, _compose_user_prompt(True),
             )
         except Exception:
-            if not news_prompt:
+            if not news_prompt and not macro_prompt:
                 raise
-            # 资讯为外部抓取内容，可能命中 LLM 输入内容审核（如 MiniMax 敏感词 422）
-            # 导致整单失败；摘除资讯段降级重试一次，保证基于行情数据的报告仍能生成
+            # 资讯/宏观为外部抓取内容，可能命中 LLM 输入内容审核（如 MiniMax 敏感词 422）
+            # 导致整单失败；摘除外部内容段降级重试一次，保证基于行情数据的报告仍能生成
             logger.warning(
-                "LLM 调用失败，摘除资讯段降级重试: run_id=%s type=%s session=%s",
+                "LLM 调用失败，摘除资讯/宏观段降级重试: run_id=%s type=%s session=%s",
                 run_id, analysis_type, session, exc_info=True,
             )
             raw_text = await _run_llm(

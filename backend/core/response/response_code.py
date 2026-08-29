@@ -148,6 +148,13 @@ class CustomErrorCode(CustomCodeBase):
     ANALYSIS_TYPE_INVALID = (11601, "error.analysis.type_invalid")
     ANALYSIS_RUN_NOT_FOUND = (11602, "error.analysis.run_not_found")
     ANALYSIS_ALREADY_RUNNING = (11603, "error.analysis.already_running")
+    # 宏观指数 11621-11640
+    MACRO_INDICATOR_INVALID = (11621, "error.macro.indicator_invalid")
+    # 企业财报 AI 解读 11641-11660
+    FINANCIAL_REPORT_NOT_FOUND = (11641, "error.financial.report_not_found")
+    FINANCIAL_REPORT_FETCH_FAILED = (11642, "error.financial.report_fetch_failed")
+    FINANCIAL_INTERPRET_NOT_FOUND = (11643, "error.financial.interpret_not_found")
+    FINANCIAL_ALREADY_RUNNING = (11644, "error.financial.already_running")
 
 @dataclass
 class CustomResponse:

@@ -440,3 +440,12 @@ stock:
   no_data: "暂无行情数据"
   index_not_found: "指数 {code} 不存在"
   board_not_found: "板块 {code} 不存在"
+
+macro:
+  indicator_invalid: "宏观指标查询参数非法"
+
+financial:
+  report_not_found: "财报数据不存在"
+  report_fetch_failed: "财报抓取失败"
+  interpret_not_found: "财报解读记录不存在"
+  already_running: "财报解读正在进行中"

@@ -22,6 +22,7 @@ declare namespace Api {
       max_positions: number;
       stop_loss_pct: number | null;
       take_profit_pct: number | null;
+      trailing_drawdown_pct: number | null;
       status: boolean;
       last_executed_at: string | null;
       created_at: string | null;
@@ -39,6 +40,7 @@ declare namespace Api {
       max_positions: number;
       stop_loss_pct?: number | null;
       take_profit_pct?: number | null;
+      trailing_drawdown_pct?: number | null;
       status: boolean;
     }
 
@@ -88,6 +90,8 @@ declare namespace Api {
       quantity: number;
       target_sell_price: number | null;
       stop_loss_price: number | null;
+      trailing_drawdown_pct: number | null;
+      peak_price: number | null;
       status: PositionStatus;
       latest_price: number | null;
       floating_pnl_pct: number | null;

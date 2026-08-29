@@ -286,6 +286,14 @@ const sectorParsed = computed(() => {
   return current.value.parsed_result as Api.Analysis.SectorParsedResult;
 });
 
+const newsParsed = computed(() => {
+  if (props.analysisType !== 'news' || !current.value?.parsed_result) return null;
+  return current.value.parsed_result as Api.Analysis.NewsParsedResult;
+});
+
+/** 资讯分析不涉及研判章节开关 */
+const isNewsType = computed(() => props.analysisType === 'news');
+
 const keyPoints = computed(() => {
   const parsed = current.value?.parsed_result as { key_points?: string[] } | null | undefined;
   return parsed?.key_points ?? [];
@@ -338,8 +346,11 @@ function tomorrowType(direction?: string): 'error' | 'success' | 'warning' {
 
 const renderedMarkdown = computed(() => {
   const raw = current.value?.ai_raw_response ?? '';
-  // 报告正文：去掉开头的 ```json 摘要代码块后渲染
-  const stripped = raw.replace(/```json\s*\{[\s\S]*?\}\s*```/, '').trim();
+  // 报告正文：去掉开头的 ```json 摘要代码块与推理模型泄漏的 <think> 块后渲染
+  const stripped = raw
+    .replace(/```json\s*\{[\s\S]*?\}\s*```/, '')
+    .replace(/<think>[\s\S]*?<\/think>/, '')
+    .trim();
   return md.render(stripped);
 });
 
@@ -347,6 +358,13 @@ function sentimentType(sentiment?: string): 'error' | 'success' | 'warning' {
   if (sentiment?.includes('看多')) return 'error';
   if (sentiment?.includes('看空')) return 'success';
   return 'warning';
+}
+
+/** 资讯影响标签：利好-红，利空-绿，中性-默认 */
+function impactTagType(impact?: string): 'error' | 'success' | 'default' {
+  if (impact?.includes('利好')) return 'error';
+  if (impact?.includes('利空')) return 'success';
+  return 'default';
 }
 
 function pctColor(val: number | null | undefined) {
@@ -483,6 +501,53 @@ onBeforeUnmount(stopPoll);
         </NDescriptionsItem>
       </NDescriptions>
 
+      <!-- 每日资讯分析：总评 + 两个分类列表（宏观/行业 与 个股，各≤10条） -->
+      <template v-if="newsParsed">
+        <NDescriptions label-placement="left" :column="1" size="small" bordered class="mb-12px">
+          <NDescriptionsItem :label="$t('page.aiAnalysis.summaryLabel')">
+            {{ newsParsed.summary ?? '-' }}
+          </NDescriptionsItem>
+        </NDescriptions>
+        <div
+          v-for="section in (['macro_industry_news', 'stock_news'] as const)"
+          :key="section"
+          class="mb-12px"
+        >
+          <NText class="mb-4px block text-13px font-500">
+            {{ $t(section === 'macro_industry_news' ? 'page.aiAnalysis.macroNewsLabel' : 'page.aiAnalysis.stockNewsLabel') }}
+          </NText>
+          <div class="flex flex-col gap-6px">
+            <div
+              v-for="(item, idx) in newsParsed[section] ?? []"
+              :key="idx"
+              class="rounded-6px border border-gray-200 px-10px py-6px dark:border-gray-700"
+            >
+              <div class="flex items-start gap-8px">
+                <NTag size="small" :bordered="false" :type="impactTagType(item.impact)">
+                  {{ item.impact || '-' }}
+                </NTag>
+                <div class="min-w-0 flex-1">
+                  <div class="flex flex-wrap items-center gap-x-8px gap-y-2px">
+                    <span class="text-13px font-500">{{ item.title || '-' }}</span>
+                    <NTag v-if="item.category" size="tiny" :bordered="false">{{ item.category }}</NTag>
+                    <NTag v-if="item.stock_name" size="tiny" :bordered="false" type="info">
+                      {{ item.stock_name }}
+                    </NTag>
+                  </div>
+                  <NText depth="2" class="text-12px leading-20px">{{ item.viewpoint || '' }}</NText>
+                  <NText depth="3" class="ml-8px text-12px">{{ item.source || '' }}</NText>
+                </div>
+              </div>
+            </div>
+            <NEmpty
+              v-if="!(newsParsed[section] ?? []).length"
+              size="small"
+              :description="$t('page.aiAnalysis.newsSectionEmpty')"
+            />
+          </div>
+        </div>
+      </template>
+
       <!-- 明日研判 -->
       <div v-if="tomorrowOutlook" class="mb-12px flex items-center gap-8px rounded-6px border border-primary-200 px-12px py-8px dark:border-primary-800">
         <NText class="shrink-0 text-13px font-500">{{ $t(outlookLabelKey) }}</NText>
@@ -519,7 +584,7 @@ onBeforeUnmount(stopPoll);
     <NDrawer v-model:show="strategyVisible" :width="480">
       <NDrawerContent :title="$t(strategyTitleKey)" closable :native-scrollbar="false">
         <NForm label-placement="top" :show-feedback="false">
-          <NFormItem :label="$t(outlookSwitchLabelKey)">
+          <NFormItem v-if="!isNewsType" :label="$t(outlookSwitchLabelKey)">
             <NSpace align="center" :size="12">
               <NSwitch v-model:value="strategyForm.include_tomorrow" />
               <NText depth="3" class="text-12px">{{ $t(outlookSwitchTipKey) }}</NText>
@@ -534,7 +599,11 @@ onBeforeUnmount(stopPoll);
               :placeholder="$t(strategyPromptPlaceholderKey)"
             />
           </NFormItem>
-          <NFormItem v-if="strategyForm.include_tomorrow" class="mt-16px" :label="$t(outlookPromptLabelKey)">
+          <NFormItem
+            v-if="strategyForm.include_tomorrow && !isNewsType"
+            class="mt-16px"
+            :label="$t(outlookPromptLabelKey)"
+          >
             <NInput
               v-model:value="strategyForm.tomorrow_prompt_template"
               type="textarea"
