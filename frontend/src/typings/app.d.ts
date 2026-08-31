@@ -1442,6 +1442,17 @@ declare namespace App {
             firstSeal: string;
             lastSeal: string;
             consecutive: string;
+            continuationProb: string;
+            probHigh: string;
+            probMid: string;
+            probLow: string;
+            probFactors: string;
+            factorConsecutive: string;
+            factorSealRatio: string;
+            factorBreakCountZero: string;
+            factorBreakCount: string;
+            factorFirstSeal: string;
+            factorTurnoverRate: string;
             industry: string;
             reason: string;
             all: string;

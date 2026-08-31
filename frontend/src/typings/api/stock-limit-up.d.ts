@@ -8,6 +8,14 @@ declare namespace Api {
     /** 市场板块 */
     type MarketBoard = 'all' | 'main' | 'chinext' | 'star' | 'bse';
 
+    /** 连板概率评分因子 */
+    interface ContinuationFactor {
+      /** 因子类型: consecutive/seal_ratio/break_count/first_seal/turnover_rate */
+      type: string;
+      /** 因子原始值，缺失为 null */
+      value: number | string | null;
+    }
+
     /** 涨停股单项 */
     interface LimitUpStockItem {
       /** 记录 ID */
@@ -44,6 +52,10 @@ declare namespace Api {
       industry: string | null;
       /** 涨停原因 */
       limit_up_reason: string | null;
+      /** 连板概率评分(0-100)，读时按封板质量启发式计算 */
+      continuation_probability: number | null;
+      /** 连板概率评分因子明细 */
+      continuation_factors: ContinuationFactor[] | null;
     }
 
     /** 涨停统计 */

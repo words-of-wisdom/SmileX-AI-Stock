@@ -10,6 +10,7 @@
 
 ## 需求索引
 
+- [2026-08-31 行业板块滚动修复 + 领涨股前三名 + 热门个股连板概率](./2026-08-31_board_top3_leading_stocks_limitup_prob.md) — 行业板块页 flex-height 滚动修复；`business_board_daily` 加 `leading_stocks` JSON（迁移 0028），东财源按板块补抓成分涨幅前三（push2 clist，域名降级链 push2→push2delay，并发5+0.1s 限速，腾讯/同花顺兜底单只）；热门个股连板概率=`calc_continuation` 启发式评分（连板高度/封成比/炸板/首封/换手，读时算不入库，封板时间 092500 格式）；i18n 三处同步
 - [2026-08-29 券商研报采集+研报中心+研报掘金策略](./2026-08-29_research_report_module.md) — 新模块 research（akshare 东财 `stock_research_report_em` 按股采集，url 去重 upsert，每4小时任务 `research.sync_reports` 持仓+近30天信号标的）；研报中心页（统计卡片/评级分布/热门TOP/筛选列表，菜单 8029-8031，权限 research:list/sync）；Agent 工具 +2（get_research_reports/get_report_consensus）注入策略 SYSTEM_PROMPT；预置策略「研报掘金」（seq=12，股票池设单只个股即对该公司分析）；坑：MappedAsDataclass 必填列在前、Date 列塞 str 报 toordinal、SQLAlchemy Result.all() 只能消费一次
 
 - [2026-08-29 每日资讯分析+宏观指数+财报解读](./2026-08-29_news_analysis_macro_financial.md) — analysis 扩展 news 类型（morning 早盘/weekly 周日晚，宏观行业与个股资讯各≤10条分类解读）；新模块 macro（中美 CPI/PPI/M1/M2，akshare 每日同步 upsert + 注入大盘/资讯 AI 分析）与 financial（新浪财务指标抓取 + AI 解读预测，持仓+近30天信号标的工作日 08:00 自动解读）；迁移 0026 三新表 + 三菜单（news 复用 analysis 权限）；坑：MappedAsDataclass 新表无默认值字段须在前、APScheduler 星期字段写 `sun`、菜单迁移逐行 insert 防 bulk_insert 首行丢值

@@ -13,7 +13,8 @@ import {
   NSpace,
   NStatistic,
   NTag,
-  NText
+  NText,
+  NTooltip
 } from 'naive-ui';
 import type { DataTableColumns } from 'naive-ui';
 import dayjs from 'dayjs';
@@ -92,6 +93,68 @@ function renderConsecutive(val: number | null) {
       {val}
       {'\u8FDE'}
     </span>
+  );
+}
+
+/** 封板时间 092500 / 09:25:00 → 09:25 展示 */
+function fmtSealTime(val: string | null) {
+  if (!val) return '-';
+  const s = val.replace(':', '');
+  if (s.length < 4) return val;
+  return `${s.slice(0, 2)}:${s.slice(2, 4)}`;
+}
+
+function formatFactor(factor: Api.StockLimitUp.ContinuationFactor) {
+  const key = 'page.aStock.limitUp';
+  const v = factor.value;
+  switch (factor.type) {
+    case 'consecutive':
+      return $t(`${key}.factorConsecutive`, { n: v ?? '-' });
+    case 'seal_ratio':
+      return $t(`${key}.factorSealRatio`, { v: v ?? '-' });
+    case 'break_count':
+      return v === 0
+        ? $t(`${key}.factorBreakCountZero`)
+        : $t(`${key}.factorBreakCount`, { n: v ?? '-' });
+    case 'first_seal':
+      return $t(`${key}.factorFirstSeal`, { time: fmtSealTime(typeof v === 'string' ? v : null) });
+    case 'turnover_rate':
+      return $t(`${key}.factorTurnoverRate`, { v: v ?? '-' });
+    default:
+      return `${factor.type}: ${v ?? '-'}`;
+  }
+}
+
+function renderContinuation(row: Api.StockLimitUp.LimitUpStockItem) {
+  const prob = row.continuation_probability;
+  if (prob === null || prob === undefined) return <NText depth={3}>-</NText>;
+  const tagType = prob >= 65 ? 'error' : prob >= 40 ? 'warning' : 'default';
+  const label = prob >= 65
+    ? $t('page.aStock.limitUp.probHigh')
+    : prob >= 40
+      ? $t('page.aStock.limitUp.probMid')
+      : $t('page.aStock.limitUp.probLow');
+  const factors = row.continuation_factors || [];
+  return (
+    <NTooltip trigger="hover" placement="left">
+      {{
+        trigger: () => (
+          <NTag size="small" type={tagType} bordered={false} style={{ fontWeight: '600' }}>
+            {prob}% {label}
+          </NTag>
+        ),
+        default: () => (
+          <div class="flex-col gap-2px">
+            <span class="font-500">{$t('page.aStock.limitUp.probFactors')}</span>
+            {factors.map(f => (
+              <span key={f.type} class="text-12px whitespace-nowrap">
+                {formatFactor(f)}
+              </span>
+            ))}
+          </div>
+        )
+      }}
+    </NTooltip>
   );
 }
 
@@ -241,6 +304,14 @@ const columns = computed<DataTableColumns<Api.StockLimitUp.LimitUpStockItem>>(()
     render: row => renderConsecutive(row.consecutive_limit_up)
   },
   {
+    key: 'continuation_probability',
+    title: $t('page.aStock.limitUp.continuationProb'),
+    width: 110,
+    align: 'center',
+    sorter: (a, b) => (a.continuation_probability ?? 0) - (b.continuation_probability ?? 0),
+    render: row => renderContinuation(row)
+  },
+  {
     key: 'industry',
     title: $t('page.aStock.limitUp.industry'),
     width: 110,
@@ -334,7 +405,7 @@ onMounted(() => {
           size="small"
           :loading="loading"
           :flex-height="!appStore.isMobile"
-          :scroll-x="1400"
+          :scroll-x="1500"
           :row-key="(row: Api.StockLimitUp.LimitUpStockItem) => row.id"
           class="sm:flex-1-hidden"
         />

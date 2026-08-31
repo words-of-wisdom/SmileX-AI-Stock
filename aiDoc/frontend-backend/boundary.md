@@ -371,3 +371,11 @@ METHOD \n PATH \n timestamp \n nonce \n app_id \n sha256(body).hexdigest()
 - 新表 `business_research_report`（`url` 唯一 upsert）；数据源 akshare `stock_research_report_em`；定时任务 `research.sync_reports`（cron `0 */4 * * *`）
 - **供 AI/策略消费**：Agent 工具 `get_research_reports(stock_code, days=90, limit=10)` 与 `get_report_consensus(stock_code, days=90)`（评级分布/覆盖机构数/最新评级时间线），已加入策略 SYSTEM_PROMPT 工具清单；预置策略「研报掘金」（general 类，pre_market 时段，股票池设单只个股即对该公司分析）
 - 菜单 `ai_research-report`（研报中心，ID 8029-8031）；前端 `views/ai/research-report/index.vue`（统计卡片 + 评级分布 + 热门 TOP 点击筛选 + remote 分页列表）
+
+### A股板块领涨股前三名 + 涨停池连板概率（2026-08-31，迁移 0028）
+
+- `GET /admin/stock/board/list` 的 `BoardDailyItem` 新增 `leading_stocks: [{code, name, change_pct}] | null`（板块内涨幅前三降序，兜底数据源仅单只且 `code` 可为 null）；旧三字段 `leading_stock_*` 保留并由 top1 回填，前端优先渲染 `leading_stocks`，历史数据回退旧字段
+- 数据来源：东财源按板块补抓 push2 clist 成分涨幅榜（域名降级链 push2→push2delay，实时源 IP 限流时切延时源）；腾讯兜底自带代码单只、同花顺兜底无代码单只
+- `GET /admin/stock/limit-up/list` 的 `LimitUpStockItem` 新增 `continuation_probability: 0-100` 与 `continuation_factors: [{type, value}]`（读时按封板质量启发式计算不入库，历史日期同样可用；**规则评分非模型预测**）
+- 因子 `type` 枚举：`consecutive`（连板高度）/`seal_ratio`（封成比=封单÷成交额）/`break_count`（炸板次数）/`first_seal`（首封时间，原始字符串 `HHMMSS`）/`turnover_rate`（换手率%）；`value` 缺失为 null，前端按 i18n 模板渲染（`page.aStock.limitUp.factor*`）
+- 前端：`views/a-stock/industry-board`（领涨股列前三 + flex-height 滚动修复）、`views/a-stock/limit-up`（连板概率列 NTag 高≥65/中40-65/低<40 + NTooltip 因子明细）

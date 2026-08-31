@@ -12,6 +12,13 @@ from pydantic import Field
 from modules.common.schemas.base import BaseEntity
 
 
+class ContinuationFactor(BaseEntity):
+    """连板概率评分因子"""
+
+    type: str = Field(..., description="因子类型: consecutive/seal_ratio/break_count/first_seal/turnover_rate")
+    value: float | str | None = Field(None, description="因子原始值，缺失为 None")
+
+
 class LimitUpStockItem(BaseEntity):
     """涨停股单项"""
 
@@ -32,6 +39,8 @@ class LimitUpStockItem(BaseEntity):
     consecutive_limit_up: int | None = None
     industry: str | None = None
     limit_up_reason: str | None = None
+    continuation_probability: int | None = Field(None, description="连板概率评分(0-100)，读时按封板质量启发式计算")
+    continuation_factors: list[ContinuationFactor] | None = Field(None, description="连板概率评分因子明细")
 
 
 class LimitUpStats(BaseEntity):
