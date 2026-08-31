@@ -57,6 +57,8 @@ SYSTEM_PROMPT = """你是 SmileX-AI-Stock 平台的 AI 策略分析师，负责�
 - get_limit_up_stocks: 涨停股池
 - get_index_constituents: 指数成分股列表（沪深300/中证500，蓝筹白马选股参考）
 - get_latest_news: 最新财经新闻
+- get_research_reports: 个股近期券商研报列表（评级/盈利预测 EPS/PE/机构/日期）
+- get_report_consensus: 个股研报共识（评级分布/覆盖机构数/最新评级时间线）
 
 工作流程：
 1. 先调用工具获取真实行情数据，禁止凭空编造价格和数据
@@ -128,7 +130,7 @@ def _to_signal(raw: dict) -> Optional[SignalItem]:
 async def _run_llm(db: AsyncSession, user_prompt: str) -> str:
     """带工具调用的 LLM 循环（复用 agent 的 ReAct 模式，非流式消费），返回最终文本"""
     # 触发工具模块导入，完成注册
-    from modules.agent.tools import stock_tools, news_tools  # noqa: F401
+    from modules.agent.tools import stock_tools, news_tools, research_report_tools  # noqa: F401
 
     from database.models.sys.ai_model import AiFunctionEnum
 

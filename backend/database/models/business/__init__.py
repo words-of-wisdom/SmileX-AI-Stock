@@ -23,6 +23,8 @@ from .macro import BusinessMacroIndicator
 
 from .financial import BusinessFinancialReport, BusinessFinancialInterpretation
 
+from .research import BusinessResearchReport
+
 __all__ = [
     "AppUser",
     "BusinessNews",
@@ -39,4 +41,5 @@ __all__ = [
     "BusinessMacroIndicator",
     "BusinessFinancialReport",
     "BusinessFinancialInterpretation",
+    "BusinessResearchReport",
 ]

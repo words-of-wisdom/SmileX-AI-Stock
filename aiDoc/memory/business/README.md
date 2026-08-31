@@ -10,6 +10,8 @@
 
 ## 需求索引
 
+- [2026-08-29 券商研报采集+研报中心+研报掘金策略](./2026-08-29_research_report_module.md) — 新模块 research（akshare 东财 `stock_research_report_em` 按股采集，url 去重 upsert，每4小时任务 `research.sync_reports` 持仓+近30天信号标的）；研报中心页（统计卡片/评级分布/热门TOP/筛选列表，菜单 8029-8031，权限 research:list/sync）；Agent 工具 +2（get_research_reports/get_report_consensus）注入策略 SYSTEM_PROMPT；预置策略「研报掘金」（seq=12，股票池设单只个股即对该公司分析）；坑：MappedAsDataclass 必填列在前、Date 列塞 str 报 toordinal、SQLAlchemy Result.all() 只能消费一次
+
 - [2026-08-29 每日资讯分析+宏观指数+财报解读](./2026-08-29_news_analysis_macro_financial.md) — analysis 扩展 news 类型（morning 早盘/weekly 周日晚，宏观行业与个股资讯各≤10条分类解读）；新模块 macro（中美 CPI/PPI/M1/M2，akshare 每日同步 upsert + 注入大盘/资讯 AI 分析）与 financial（新浪财务指标抓取 + AI 解读预测，持仓+近30天信号标的工作日 08:00 自动解读）；迁移 0026 三新表 + 三菜单（news 复用 analysis 权限）；坑：MappedAsDataclass 新表无默认值字段须在前、APScheduler 星期字段写 `sun`、菜单迁移逐行 insert 防 bulk_insert 首行丢值
 
 - [2026-08-28 持仓跟踪筛选/排序/滚动改造 + 亏损归因](./2026-08-28_position_tracking_filters_and_loss_diagnosis.md) — 持仓 Tab 修无法滚动（flex-height+remote+h-full flex 链）；GET /positions 加 start_time/end_time（按 buy_time）+ sort_by/sort_desc（pnl/return_rate/buy_time/sell_time 白名单，nulls_last）；前端策略 NSelect（独立全量加载选项）+ datetimerange + 列排序走服务端。亏损归因：执行价格实时无延迟（新浪直拉），嫌疑主因是**信号生成读昨日收盘快照**（盘中 AI 看过期大盘/板块/涨停数据）+ **T+1 当日不可止损**结构性缺口

@@ -1500,6 +1500,32 @@ declare namespace App {
             noData: string;
           };
         };
+        research: {
+          title: string;
+          subtitle: string;
+          syncBtn: string;
+          syncDone: string;
+          statTotal: string;
+          statTotalSuffix: string;
+          statStocks: string;
+          statOrgs: string;
+          hotStocks: string;
+          hotOrgs: string;
+          listTitle: string;
+          stockCol: string;
+          titleCol: string;
+          orgCol: string;
+          ratingCol: string;
+          industryCol: string;
+          forecastCol: string;
+          dateCol: string;
+          stockPlaceholder: string;
+          keywordPlaceholder: string;
+          orgPlaceholder: string;
+          ratingPlaceholder: string;
+          datePlaceholder: string;
+          searchBtn: string;
+        };
       aiStrategy: {
         tabStrategies: string;
         tabPositions: string;

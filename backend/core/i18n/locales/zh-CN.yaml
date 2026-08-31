@@ -449,3 +449,7 @@ financial:
   report_fetch_failed: "财报抓取失败"
   interpret_not_found: "财报解读记录不存在"
   already_running: "财报解读正在进行中"
+
+research:
+  stock_code_invalid: "股票代码非法"
+  sync_failed: "研报同步失败"

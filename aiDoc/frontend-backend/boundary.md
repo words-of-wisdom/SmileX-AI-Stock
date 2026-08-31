@@ -362,3 +362,12 @@ METHOD \n PATH \n timestamp \n nonce \n app_id \n sha256(body).hexdigest()
 - 新表 `business_financial_report`（`stock_code+report_period` 唯一）与 `business_financial_interpretation`；数据源 akshare `stock_financial_analysis_indicator`（新浪财务指标，白名单列名容错匹配）
 - 定时任务 `financial.auto_interpret`（cron `0 8 * * mon-fri`）：持仓 + 近30天策略信号标的，补抓财报后对最新报告期无成功解读的个股自动提交解读（同报告期去重）
 - 菜单 `ai_financial-analysis`（财报分析）；前端 `views/ai/financial-analysis/index.vue`（代码查询 + 解读报告 + 指标表 + 历史列表）
+
+### 券商研报中心（research 新模块，迁移 0027）
+
+- 前缀 `/admin/research`；权限码 `research:list`（查询）、`research:sync`（手动同步）；错误码 11661-11662（stock_code_invalid / sync_failed）
+- 接口：`GET /research/reports?page&page_size&stock_code&keyword&org_name&rating&start_date&end_date`（分页研报列表，published_date 倒序）、`GET /research/reports/stats?days=30`（概览统计）、`POST /research/reports/sync`（body `{stock_codes: []}`，不传自动收集持仓+近30天信号标的，空库用兜底热门池；返回 `{codes, saved, failed}`）
+- 研报字段：`stock_code/stock_name/title/url(去重键)/org_name/rating/industry/published_date/forecast({年份:{eps,pe}})`；东财源无作者/目标价/摘要
+- 新表 `business_research_report`（`url` 唯一 upsert）；数据源 akshare `stock_research_report_em`；定时任务 `research.sync_reports`（cron `0 */4 * * *`）
+- **供 AI/策略消费**：Agent 工具 `get_research_reports(stock_code, days=90, limit=10)` 与 `get_report_consensus(stock_code, days=90)`（评级分布/覆盖机构数/最新评级时间线），已加入策略 SYSTEM_PROMPT 工具清单；预置策略「研报掘金」（general 类，pre_market 时段，股票池设单只个股即对该公司分析）
+- 菜单 `ai_research-report`（研报中心，ID 8029-8031）；前端 `views/ai/research-report/index.vue`（统计卡片 + 评级分布 + 热门 TOP 点击筛选 + remote 分页列表）

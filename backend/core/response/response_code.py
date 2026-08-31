@@ -155,6 +155,9 @@ class CustomErrorCode(CustomCodeBase):
     FINANCIAL_REPORT_FETCH_FAILED = (11642, "error.financial.report_fetch_failed")
     FINANCIAL_INTERPRET_NOT_FOUND = (11643, "error.financial.interpret_not_found")
     FINANCIAL_ALREADY_RUNNING = (11644, "error.financial.already_running")
+    # 券商研报 11661-11680
+    RESEARCH_STOCK_CODE_INVALID = (11661, "error.research.stock_code_invalid")
+    RESEARCH_SYNC_FAILED = (11662, "error.research.sync_failed")
 
 @dataclass
 class CustomResponse:
