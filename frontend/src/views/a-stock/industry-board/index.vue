@@ -4,6 +4,7 @@ import { computed, onMounted, ref } from 'vue';
 import { NButton, NCard, NDataTable, NDatePicker, NRadioButton, NRadioGroup, NSpace, NTag, NText } from 'naive-ui';
 import type { DataTableColumns } from 'naive-ui';
 import { fetchGetBoardDates, fetchGetBoardList, fetchSyncBoard } from '@/service/api';
+import { useAppStore } from '@/store/modules/app';
 import { useAutoRefresh } from '@/hooks/common/auto-refresh';
 import { $t } from '@/locales';
 import { isStockAutoRefreshTime } from '../utils';
@@ -11,6 +12,8 @@ import { isStockAutoRefreshTime } from '../utils';
 defineOptions({
   name: 'IndustryBoard'
 });
+
+const appStore = useAppStore();
 
 const UP = '#f5222d';
 const DOWN = '#52c41a';
@@ -219,14 +222,18 @@ onMounted(() => {
     </NCard>
 
     <NCard :bordered="false" size="small" class="card-wrapper sm:flex-1-hidden">
-      <NDataTable
-        :columns="columns"
-        :data="data"
-        size="small"
-        :loading="loading"
-        :scroll-x="900"
-        :row-key="(row: Api.StockBoard.BoardDailyItem) => row.id"
-      />
+      <div class="h-full flex-col-stretch">
+        <NDataTable
+          :columns="columns"
+          :data="data"
+          size="small"
+          :loading="loading"
+          :flex-height="!appStore.isMobile"
+          :scroll-x="900"
+          :row-key="(row: Api.StockBoard.BoardDailyItem) => row.id"
+          class="sm:flex-1-hidden"
+        />
+      </div>
     </NCard>
   </div>
 </template>
