@@ -156,15 +156,41 @@ const columns = computed<DataTableColumns<Api.StockBoard.BoardDailyItem>>(() => 
   {
     key: 'leading_stock',
     title: $t('page.aStock.industryBoard.leadingStock'),
-    minWidth: 150,
+    minWidth: 230,
     render: row => {
-      if (!row.leading_stock_name) return <NText depth={3}>-</NText>;
+      const stocks: Api.StockBoard.BoardLeadingStock[] =
+        row.leading_stocks && row.leading_stocks.length > 0
+          ? row.leading_stocks
+          : row.leading_stock_name
+            ? [
+                {
+                  code: row.leading_stock_code,
+                  name: row.leading_stock_name,
+                  change_pct: row.leading_stock_change_pct
+                }
+              ]
+            : [];
+      if (stocks.length === 0) return <NText depth={3}>-</NText>;
       return (
-        <div class="flex items-center gap-8px">
-          <span>{row.leading_stock_name}</span>
-          <NTag size="small" bordered={false} style={{ color: pctColor(row.leading_stock_change_pct) }}>
-            {fmtPct(row.leading_stock_change_pct)}
-          </NTag>
+        <div class="flex-col gap-2px py-2px">
+          {stocks.map(stock => (
+            <div key={`${stock.code ?? ''}-${stock.name}`} class="flex items-center gap-6px text-12px">
+              {stock.code ? (
+                <NText depth={3} style={{ fontFamily: 'monospace', fontSize: '11px' }}>
+                  {stock.code}
+                </NText>
+              ) : null}
+              <span class="whitespace-nowrap">{stock.name}</span>
+              <NTag
+                size="small"
+                bordered={false}
+                class="ml-auto"
+                style={{ color: pctColor(stock.change_pct) }}
+              >
+                {fmtPct(stock.change_pct)}
+              </NTag>
+            </div>
+          ))}
         </div>
       );
     }
@@ -229,7 +255,7 @@ onMounted(() => {
           size="small"
           :loading="loading"
           :flex-height="!appStore.isMobile"
-          :scroll-x="900"
+          :scroll-x="1050"
           :row-key="(row: Api.StockBoard.BoardDailyItem) => row.id"
           class="sm:flex-1-hidden"
         />

@@ -12,6 +12,14 @@ from pydantic import Field
 from modules.common.schemas.base import BaseEntity
 
 
+class BoardLeadingStock(BaseEntity):
+    """板块领涨股单项"""
+
+    code: str | None = Field(None, description="股票代码，兜底数据源可能缺失")
+    name: str
+    change_pct: float | None = Field(None, description="涨跌幅(%)")
+
+
 class BoardDailyItem(BaseEntity):
     """板块日快照项"""
 
@@ -30,6 +38,9 @@ class BoardDailyItem(BaseEntity):
     leading_stock_code: str | None = None
     leading_stock_name: str | None = None
     leading_stock_change_pct: float | None = None
+    leading_stocks: list[BoardLeadingStock] | None = Field(
+        None, description="领涨股前三名，按板块内涨幅降序"
+    )
 
 
 class BoardHistoryItem(BaseEntity):

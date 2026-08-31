@@ -18,6 +18,7 @@ from sqlalchemy import (
     Integer,
     Numeric,
     Date,
+    JSON,
     UniqueConstraint,
 )
 from sqlalchemy.orm import mapped_column, Mapped
@@ -159,6 +160,10 @@ class BusinessBoardDaily(Base):
     )
     leading_stock_change_pct: Mapped[Optional[float]] = mapped_column(
         Numeric(8, 4), nullable=True, comment="领涨股涨跌幅(%)", default=None
+    )
+    leading_stocks: Mapped[Optional[list]] = mapped_column(
+        JSON, nullable=True, default=None,
+        comment="领涨股前三名 [{code, name, change_pct}]，抓取层按板块内涨幅排序",
     )
 
 

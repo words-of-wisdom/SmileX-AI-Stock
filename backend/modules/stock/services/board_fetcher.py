@@ -28,6 +28,13 @@ _QQ_HEADERS = {
         "(KHTML, like Gecko) Chrome/126.0 Safari/537.36"
     ),
 }
+_EM_CLIST_HOSTS = (
+    "push2.eastmoney.com",       # 实时行情（主）
+    "push2delay.eastmoney.com",  # 延时行情（实时源 IP 限流时降级，收盘后同步数据无差异）
+)
+# 板块内个股涨幅榜并发上限与单请求间隔：push2 对高频请求有 IP 级封禁，概念板块量大需限速
+_EM_TOP_STOCKS_CONCURRENCY = 5
+_EM_TOP_STOCKS_INTERVAL = 0.1
 _THS_UA = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
     "(KHTML, like Gecko) Chrome/89.0.4389.90 Safari/537.36"
@@ -41,6 +48,107 @@ def _pick(row, *keys):
         if k in row and row[k] is not None:
             return row[k]
     return None
+
+
+def _single_leading_item(code, name, change_pct) -> list[dict]:
+    """兜底数据源只提供单只领涨股时，包装为 leading_stocks 单元素列表"""
+    if not name:
+        return []
+    return [{"code": code or None, "name": name, "change_pct": change_pct}]
+
+
+async def _pick_em_clist_url(client: httpx.AsyncClient) -> str:
+    """探测可用的东财行情 clist 接口地址：逐域名试探，实时源被 IP 限流时降级延时源"""
+    params = {"pn": 1, "pz": 1, "po": 1, "np": 1, "fltt": 2, "invt": 2,
+              "fid": "f3", "fs": "b:BK0475", "fields": "f12"}
+    last_error: Exception | None = None
+    for host in _EM_CLIST_HOSTS:
+        url = f"https://{host}/api/qt/clist/get"
+        try:
+            resp = await client.get(url, params=params)
+            if resp.json().get("rc") == 0:
+                return url
+        except Exception as e:  # noqa: BLE001
+            last_error = e
+    raise RuntimeError(f"东财 clist 接口全部不可用: {last_error}")
+
+
+async def _fetch_board_leading_stocks_em(
+    client: httpx.AsyncClient, clist_url: str, board_code: str, top_n: int = 3
+) -> list[dict]:
+    """东财 push2 板块内个股涨幅榜，返回前 top_n 名 [{code, name, change_pct}]
+
+    板块列表接口的领涨股列只有名称无代码，需按板块逐个补抓成分涨幅前三。
+    """
+    resp = await client.get(
+        clist_url,
+        params={
+            "pn": 1,
+            "pz": top_n,
+            "po": 1,
+            "np": 1,
+            "fltt": 2,
+            "invt": 2,
+            "fid": "f3",  # 按涨跌幅降序
+            "fs": f"b:{board_code}",
+            "fields": "f12,f14,f3",
+        },
+    )
+    resp.raise_for_status()
+    payload = resp.json()
+    if payload.get("rc") != 0:
+        raise RuntimeError(f"东财板块个股榜返回错误: {payload.get('rt')}")
+    diff = (payload.get("data") or {}).get("diff") or []
+    items = []
+    for d in diff:
+        name = str(d.get("f14", "")).strip()
+        if not name:
+            continue
+        items.append({
+            "code": normalize_code(d.get("f12")) or None,
+            "name": name,
+            "change_pct": num(d.get("f3")),
+        })
+    return items
+
+
+async def _enrich_leading_stocks(items: list[dict]) -> None:
+    """为东财板块列表补抓每个板块的领涨股前三名（含代码）
+
+    单板块失败不影响整体，回退为列表自带单只领涨股（名称无代码）；
+    补抓成功时用 top1 回填旧三字段，补齐东财源缺失的领涨股代码。
+    """
+    sem = asyncio.Semaphore(_EM_TOP_STOCKS_CONCURRENCY)
+
+    async with httpx.AsyncClient(timeout=10, headers=_QQ_HEADERS) as client:
+        # 域名探测一次：实时源被限流时整批切到延时源，避免逐板块重复探测
+        clist_url = await _pick_em_clist_url(client)
+
+        async def _enrich_one(it: dict) -> None:
+            async with sem:
+                try:
+                    leading = await _fetch_board_leading_stocks_em(client, clist_url, it["board_code"])
+                except Exception as e:
+                    logger.warning(
+                        "板块领涨股前三名抓取失败(%s %s): %s",
+                        it["board_code"], it["board_name"], e,
+                    )
+                    leading = []
+                await asyncio.sleep(_EM_TOP_STOCKS_INTERVAL)
+            if leading:
+                it["leading_stocks"] = leading
+                top1 = leading[0]
+                it["leading_stock_code"] = top1["code"]
+                it["leading_stock_name"] = top1["name"]
+                it["leading_stock_change_pct"] = top1["change_pct"]
+            else:
+                it["leading_stocks"] = _single_leading_item(
+                    it.get("leading_stock_code"),
+                    it.get("leading_stock_name"),
+                    it.get("leading_stock_change_pct"),
+                )
+
+        await asyncio.gather(*(_enrich_one(it) for it in items))
 
 
 async def fetch_board_list(board_type: str) -> list[dict]:
@@ -89,13 +197,16 @@ async def _fetch_board_list_em(board_type: str) -> list[dict]:
             "volume": None,
             "rising_count": num(row.get("上涨家数")),
             "falling_count": num(row.get("下跌家数")),
-            # 领涨股票列是名称不是代码，代码字段留空
+            # 领涨股票列是名称不是代码，代码字段留空，随后 _enrich_leading_stocks 补齐
             "leading_stock_code": None,
             "leading_stock_name": str(row.get("领涨股票", "")).strip() or None,
             "leading_stock_change_pct": num(row.get("领涨股票-涨跌幅")),
         })
     if not items:
         raise RuntimeError(f"东财板块列表为空({board_type})")
+
+    # 逐板块补抓领涨股前三名（含代码），失败时回退列表自带单只领涨股
+    await _enrich_leading_stocks(items)
     return items
 
 
@@ -158,6 +269,8 @@ def _fetch_board_list_ths_sync() -> list[dict]:
         turnover = num(row.get("总成交额（亿元）"))
         net_inflow = num(row.get("净流入（亿元）"))
         volume = num(row.get("总成交量（万手）"))
+        leading_name = str(row.get("领涨股", "")).strip() or None
+        leading_pct = num(row.get("涨跌幅(%).1"))
         items.append({
             "board_type": "industry",
             "board_code": name_code_map.get(board_name, board_name),
@@ -171,8 +284,10 @@ def _fetch_board_list_ths_sync() -> list[dict]:
             "rising_count": num(row.get("上涨家数")),
             "falling_count": num(row.get("下跌家数")),
             "leading_stock_code": None,
-            "leading_stock_name": str(row.get("领涨股", "")).strip() or None,
-            "leading_stock_change_pct": num(row.get("涨跌幅(%).1")),
+            "leading_stock_name": leading_name,
+            "leading_stock_change_pct": leading_pct,
+            # 同花顺列表领涨股仅名称无代码
+            "leading_stocks": _single_leading_item(None, leading_name, leading_pct),
         })
     if not items:
         raise RuntimeError("同花顺行业板块列表为空")
@@ -226,6 +341,9 @@ async def _fetch_board_list_qq(board_type: str) -> list[dict]:
                     up, down = breadth.split("/", 1)
                     rising_count, falling_count = num(up), num(down)
                 leading = row.get("lzg") or {}
+                leading_code = normalize_code(leading.get("code")) or None
+                leading_name = str(leading.get("name", "")).strip() or None
+                leading_pct = num(leading.get("zdf"))
                 items.append({
                     "board_type": board_type,
                     "board_code": board_code,
@@ -237,9 +355,11 @@ async def _fetch_board_list_qq(board_type: str) -> list[dict]:
                     "net_inflow": net_inflow * 1e4 if net_inflow is not None else None,
                     "rising_count": int(rising_count) if rising_count is not None else None,
                     "falling_count": int(falling_count) if falling_count is not None else None,
-                    "leading_stock_code": normalize_code(leading.get("code")) or None,
-                    "leading_stock_name": str(leading.get("name", "")).strip() or None,
-                    "leading_stock_change_pct": num(leading.get("zdf")),
+                    "leading_stock_code": leading_code,
+                    "leading_stock_name": leading_name,
+                    "leading_stock_change_pct": leading_pct,
+                    # 腾讯源领涨股仅单只，但自带代码
+                    "leading_stocks": _single_leading_item(leading_code, leading_name, leading_pct),
                 })
             offset += len(rows)
             total = num(data.get("total")) or 0

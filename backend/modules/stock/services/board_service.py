@@ -72,6 +72,7 @@ class BoardService:
                 "leading_stock_code": it.get("leading_stock_code"),
                 "leading_stock_name": it.get("leading_stock_name"),
                 "leading_stock_change_pct": it.get("leading_stock_change_pct"),
+                "leading_stocks": it.get("leading_stocks"),
                 "created_at": timezone.now(),
             })
 
@@ -99,6 +100,7 @@ class BoardService:
                 "leading_stock_code": stmt.excluded.leading_stock_code,
                 "leading_stock_name": stmt.excluded.leading_stock_name,
                 "leading_stock_change_pct": stmt.excluded.leading_stock_change_pct,
+                "leading_stocks": stmt.excluded.leading_stocks,
                 "updated_at": timezone.now(),
             },
         )

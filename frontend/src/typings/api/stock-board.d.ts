@@ -11,6 +11,16 @@ declare namespace Api {
     /** 排序字段 */
     type SortBy = 'change_pct' | 'net_inflow';
 
+    /** 板块领涨股单项 */
+    interface BoardLeadingStock {
+      /** 股票代码（兜底数据源可能缺失） */
+      code: string | null;
+      /** 股票名称 */
+      name: string;
+      /** 涨跌幅(%) */
+      change_pct: number | null;
+    }
+
     /** 板块日快照项 */
     interface BoardDailyItem {
       /** 记录 ID */
@@ -43,6 +53,8 @@ declare namespace Api {
       leading_stock_name: string | null;
       /** 领涨股涨跌幅(%) */
       leading_stock_change_pct: number | null;
+      /** 领涨股前三名，按板块内涨幅降序 */
+      leading_stocks: BoardLeadingStock[] | null;
     }
 
     /** 板块历史趋势项 */
