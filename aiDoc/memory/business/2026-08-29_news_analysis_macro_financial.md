@@ -12,6 +12,11 @@
 
 已完成（2026-08-29）
 
+### 后续增强（2026-09-01）
+
+- 财报解读右侧抽屉展示本期评级 + 下期预测评级
+- 解读记录列表（`financial-analysis/index.vue` historyColumns）在「报告期」后新增「本期评级」「下期预测」两列：数据取列表接口已返回的 `parsed_result`（quality_rating / next_quality_rating / forecast.direction），纯前端改动；仅 status=success 时显示 Tag，否则占位「-」；下期预测列 = 下期预测评级 Tag + 方向 Tag（改善/持平/恶化）
+
 ## 涉及范围
 
 ### 后端

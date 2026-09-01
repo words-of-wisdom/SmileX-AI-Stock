@@ -301,7 +301,12 @@ watch(statDays, () => loadStockStats());
 <template>
   <div class="min-h-500px h-full flex flex-col gap-12px overflow-hidden">
     <!-- 顶部标题 + 同步 -->
-    <NCard :bordered="false" size="small" class="card-wrapper">
+    <NCard
+      :bordered="false"
+      size="small"
+      class="card-wrapper flex-1 min-h-0 flex flex-col"
+      :content-style="{ flex: '1', minHeight: '0', display: 'flex', flexDirection: 'column' }"
+    >
       <template #header>
         <div class="flex-y-center gap-8px">
           <span class="text-16px font-500">{{ $t('page.research.title') }}</span>
@@ -315,10 +320,17 @@ watch(statDays, () => loadStockStats());
         </NButton>
       </template>
 
-      <NTabs v-model:value="activeTab" type="line" size="small" animated>
+      <NTabs
+        v-model:value="activeTab"
+        type="line"
+        size="small"
+        animated
+        class="flex-1 min-h-0"
+        pane-class="h-full flex flex-col"
+      >
         <!-- ==================== 统计 Tab ==================== -->
         <NTabPane :name="TAB_STATS" :tab="$t('page.research.tabStats')">
-          <div class="flex flex-col gap-12px">
+          <div class="h-full flex flex-col gap-12px overflow-auto pr-4px">
             <!-- 概览统计卡片 -->
             <NGrid :x-gap="12" :y-gap="12" :cols="2" s:cols="4" responsive="screen">
               <NGridItem>
@@ -416,7 +428,7 @@ watch(statDays, () => loadStockStats());
         </NTabPane>
 
         <!-- ==================== 列表 Tab ==================== -->
-        <NTabPane :name="TAB_LIST" :tab="$t('page.research.tabList')">
+        <NTabPane :name="TAB_LIST" :tab="$t('page.research.tabList')" class="flex flex-col">
           <NSpace class="mb-12px" :size="12" align="center" :wrap="true">
             <NInput
               v-model:value="query.stockCode"
@@ -464,7 +476,7 @@ watch(statDays, () => loadStockStats());
           <NDataTable
             remote
             flex-height
-            class="h-560px"
+            class="flex-1 min-h-0"
             :loading="loading"
             :columns="columns"
             :data="records"
@@ -477,4 +489,24 @@ watch(statDays, () => loadStockStats());
   </div>
 </template>
 
-<style scoped></style>
+<style scoped>
+/* 让 NTabs 内部撑满：nav 在上、pane 容器与 pane 占满剩余高度 */
+:deep(.n-tabs) {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+:deep(.n-tabs .n-tabs-pane-wrapper) {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+:deep(.n-tabs .n-tab-pane) {
+  flex: 1;
+  min-height: 0;
+  height: auto;
+}
+</style>

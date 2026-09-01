@@ -213,6 +213,44 @@ const historyColumns = computed<DataTableColumns<Api.Financial.FinancialInterpre
     render: row => <span class="text-12px">{row.report_period ?? '-'}</span>
   },
   {
+    key: 'quality_rating',
+    title: $t('page.financial.ratingLabel'),
+    width: 100,
+    render: row =>
+      row.status === 'success' && row.parsed_result?.quality_rating ? (
+        <NTag type={ratingType(row.parsed_result.quality_rating)} size="small">
+          {row.parsed_result.quality_rating}
+        </NTag>
+      ) : (
+        <span class="text-12px">-</span>
+      )
+  },
+  {
+    key: 'next_forecast',
+    title: $t('page.financial.forecastLabel'),
+    width: 150,
+    render: row => {
+      if (row.status !== 'success') return <span class="text-12px">-</span>;
+      const next = row.parsed_result?.next_quality_rating;
+      const dir = row.parsed_result?.forecast?.direction;
+      if (!next && !dir) return <span class="text-12px">-</span>;
+      return (
+        <NSpace align="center" size={4} wrap={false}>
+          {next ? (
+            <NTag type={ratingType(next)} size="small" bordered={false}>
+              {next}
+            </NTag>
+          ) : null}
+          {dir ? (
+            <NTag type={forecastType(dir)} size="small" bordered={false}>
+              {dir}
+            </NTag>
+          ) : null}
+        </NSpace>
+      );
+    }
+  },
+  {
     key: 'created_at',
     title: $t('page.aiAnalysis.execTime'),
     width: 140,
