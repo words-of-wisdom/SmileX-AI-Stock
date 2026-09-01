@@ -1622,6 +1622,8 @@ const local: App.I18n.Schema = {
       datePlaceholder: 'Published date range',
       searchBtn: 'Search',
       statTitle: 'Report Statistics',
+      tabStats: 'Statistics',
+      tabList: 'List',
       statSubtitle: 'Per-stock coverage and positive rating ratio within the window',
       range7d: '7D',
       range1m: '1M',

@@ -1619,6 +1619,8 @@ const local: App.I18n.Schema = {
       datePlaceholder: '发布日期区间',
       searchBtn: '查询',
       statTitle: '研报统计',
+      tabStats: '统计',
+      tabList: '列表',
       statSubtitle: '按股票分组统计时间窗内研报覆盖与看多评级占比',
       range7d: '7天',
       range1m: '1月',

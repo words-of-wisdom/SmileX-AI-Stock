@@ -1537,6 +1537,8 @@ declare namespace App {
           datePlaceholder: string;
           searchBtn: string;
           statTitle: string;
+          tabStats: string;
+          tabList: string;
           statSubtitle: string;
           range7d: string;
           range1m: string;

@@ -14,6 +14,8 @@ import {
   NSelect,
   NSpace,
   NStatistic,
+  NTabPane,
+  NTabs,
   NTag,
   NText
 } from 'naive-ui';
@@ -46,6 +48,19 @@ const query = reactive({
   rating: null as string | null,
   dateRange: null as [number, number] | null
 });
+
+// ==================== Tab 切换 ====================
+const TAB_STATS = 'stats';
+const TAB_LIST = 'list';
+const activeTab = ref(TAB_STATS);
+
+/** 跳到列表 Tab 并按条件筛选（热门标签/统计行「查看研报」联动） */
+function gotoListWithFilter(code?: string, org?: string) {
+  if (code !== undefined) query.stockCode = code;
+  if (org !== undefined) query.orgName = org;
+  activeTab.value = TAB_LIST;
+  onSearch();
+}
 
 // ==================== 研报统计（按股票分组） ====================
 const RANGE_OPTIONS = [
@@ -108,7 +123,7 @@ const statColumns: DataTableColumns<Api.Research.ResearchStockStatItem> = [
           tertiary: true,
           onClick: () => {
             query.stockCode = row.stock_code;
-            onSearch();
+            gotoListWithFilter(row.stock_code);
           }
         },
         { default: () => $t('page.research.viewReports') }
@@ -285,7 +300,7 @@ watch(statDays, () => loadStockStats());
 
 <template>
   <div class="min-h-500px h-full flex flex-col gap-12px overflow-hidden">
-    <!-- 概览统计 -->
+    <!-- 顶部标题 + 同步 -->
     <NCard :bordered="false" size="small" class="card-wrapper">
       <template #header>
         <div class="flex-y-center gap-8px">
@@ -300,162 +315,164 @@ watch(statDays, () => loadStockStats());
         </NButton>
       </template>
 
-      <NGrid :x-gap="12" :y-gap="12" :cols="2" s:cols="4" responsive="screen">
-        <NGridItem>
-          <NStatistic :label="$t('page.research.statTotal')" :value="stats?.total ?? 0">
-            <template #suffix>
-              <NText depth="3" class="text-12px">{{ $t('page.research.statTotalSuffix') }}</NText>
-            </template>
-          </NStatistic>
-        </NGridItem>
-        <NGridItem>
-          <NStatistic :label="$t('page.research.statStocks')" :value="stats?.stock_count ?? 0" />
-        </NGridItem>
-        <NGridItem>
-          <NStatistic :label="$t('page.research.statOrgs')" :value="stats?.org_count ?? 0" />
-        </NGridItem>
-        <NGridItem>
-          <div class="flex flex-wrap gap-6px pt-8px">
-            <NTag
-              v-for="r in stats?.rating_distribution ?? []"
-              :key="r.rating"
-              size="small"
-              :type="ratingTagType(r.rating)"
-              :bordered="false"
-            >
-              {{ r.rating }} {{ r.count }}
-            </NTag>
-          </div>
-        </NGridItem>
-      </NGrid>
+      <NTabs v-model:value="activeTab" type="line" size="small" animated>
+        <!-- ==================== 统计 Tab ==================== -->
+        <NTabPane :name="TAB_STATS" :tab="$t('page.research.tabStats')">
+          <div class="flex flex-col gap-12px">
+            <!-- 概览统计卡片 -->
+            <NGrid :x-gap="12" :y-gap="12" :cols="2" s:cols="4" responsive="screen">
+              <NGridItem>
+                <NStatistic :label="$t('page.research.statTotal')" :value="stats?.total ?? 0">
+                  <template #suffix>
+                    <NText depth="3" class="text-12px">{{ $t('page.research.statTotalSuffix') }}</NText>
+                  </template>
+                </NStatistic>
+              </NGridItem>
+              <NGridItem>
+                <NStatistic :label="$t('page.research.statStocks')" :value="stats?.stock_count ?? 0" />
+              </NGridItem>
+              <NGridItem>
+                <NStatistic :label="$t('page.research.statOrgs')" :value="stats?.org_count ?? 0" />
+              </NGridItem>
+              <NGridItem>
+                <div class="flex flex-wrap gap-6px pt-8px">
+                  <NTag
+                    v-for="r in stats?.rating_distribution ?? []"
+                    :key="r.rating"
+                    size="small"
+                    :type="ratingTagType(r.rating)"
+                    :bordered="false"
+                  >
+                    {{ r.rating }} {{ r.count }}
+                  </NTag>
+                </div>
+              </NGridItem>
+            </NGrid>
 
-      <!-- 热门 TOP -->
-      <div class="mt-8px flex flex-wrap gap-24px">
-        <div class="flex-1 min-w-300px">
-          <NText depth="3" class="text-12px">{{ $t('page.research.hotStocks') }}</NText>
-          <div class="mt-4px flex flex-wrap gap-6px">
-            <NTag
-              v-for="(s, i) in stats?.hot_stocks ?? []"
-              :key="s.name ?? i"
-              size="small"
-              class="cursor-pointer"
-              @click="((query.stockCode = s.name ?? ''), onSearch())"
-            >
-              {{ s.name }} ({{ s.count }})
-            </NTag>
-          </div>
-        </div>
-        <div class="flex-1 min-w-300px">
-          <NText depth="3" class="text-12px">{{ $t('page.research.hotOrgs') }}</NText>
-          <div class="mt-4px flex flex-wrap gap-6px">
-            <NTag
-              v-for="(o, i) in stats?.hot_orgs ?? []"
-              :key="o.name ?? i"
-              size="small"
-              class="cursor-pointer"
-              @click="((query.orgName = o.name ?? ''), onSearch())"
-            >
-              {{ o.name }} ({{ o.count }})
-            </NTag>
-          </div>
-        </div>
-      </div>
-    </NCard>
+            <!-- 热门 TOP -->
+            <div class="flex flex-wrap gap-24px">
+              <div class="flex-1 min-w-300px">
+                <NText depth="3" class="text-12px">{{ $t('page.research.hotStocks') }}</NText>
+                <div class="mt-4px flex flex-wrap gap-6px">
+                  <NTag
+                    v-for="(s, i) in stats?.hot_stocks ?? []"
+                    :key="s.name ?? i"
+                    size="small"
+                    class="cursor-pointer"
+                    @click="gotoListWithFilter(s.name ?? '')"
+                  >
+                    {{ s.name }} ({{ s.count }})
+                  </NTag>
+                </div>
+              </div>
+              <div class="flex-1 min-w-300px">
+                <NText depth="3" class="text-12px">{{ $t('page.research.hotOrgs') }}</NText>
+                <div class="mt-4px flex flex-wrap gap-6px">
+                  <NTag
+                    v-for="(o, i) in stats?.hot_orgs ?? []"
+                    :key="o.name ?? i"
+                    size="small"
+                    class="cursor-pointer"
+                    @click="gotoListWithFilter(undefined, o.name ?? '')"
+                  >
+                    {{ o.name }} ({{ o.count }})
+                  </NTag>
+                </div>
+              </div>
+            </div>
 
-    <!-- 研报统计（按股票分组） -->
-    <NCard :bordered="false" size="small" class="card-wrapper">
-      <template #header>
-        <div class="flex-y-center gap-8px">
-          <span class="text-16px font-500">{{ $t('page.research.statTitle') }}</span>
-          <NText depth="3" class="text-12px">{{ $t('page.research.statSubtitle') }}</NText>
-        </div>
-      </template>
-      <template #header-extra>
-        <NSpace :size="4" align="center">
-          <NButton
-            v-for="opt in RANGE_OPTIONS"
-            :key="opt.value"
-            size="tiny"
-            :type="statDays === opt.value ? 'primary' : 'default'"
-            secondary
-            @click="statDays = opt.value"
-          >
-            {{ opt.label }}
-          </NButton>
-        </NSpace>
-      </template>
-      <NDataTable
-        :loading="statLoading"
-        :columns="statColumns"
-        :data="stockStats"
-        size="small"
-        :max-height="360"
-        :row-key="(row: Api.Research.ResearchStockStatItem) => row.stock_code"
-      />
-    </NCard>
+            <!-- 按股票分组统计 -->
+            <NCard :bordered="true" size="small">
+              <template #header>
+                <div class="flex-y-center gap-8px">
+                  <span class="text-14px font-500">{{ $t('page.research.statTitle') }}</span>
+                  <NText depth="3" class="text-12px">{{ $t('page.research.statSubtitle') }}</NText>
+                </div>
+              </template>
+              <template #header-extra>
+                <NSpace :size="4" align="center">
+                  <NButton
+                    v-for="opt in RANGE_OPTIONS"
+                    :key="opt.value"
+                    size="tiny"
+                    :type="statDays === opt.value ? 'primary' : 'default'"
+                    secondary
+                    @click="statDays = opt.value"
+                  >
+                    {{ opt.label }}
+                  </NButton>
+                </NSpace>
+              </template>
+              <NDataTable
+                :loading="statLoading"
+                :columns="statColumns"
+                :data="stockStats"
+                size="small"
+                :max-height="360"
+                :row-key="(row: Api.Research.ResearchStockStatItem) => row.stock_code"
+              />
+            </NCard>
+          </div>
+        </NTabPane>
 
-    <!-- 研报列表 -->
-    <NCard
-      :bordered="false"
-      size="small"
-      class="card-wrapper flex-1 min-h-0 flex flex-col"
-      :content-style="{ flex: '1', minHeight: '0', display: 'flex', flexDirection: 'column' }"
-    >
-      <template #header>{{ $t('page.research.listTitle') }}</template>
-      <NSpace class="mb-12px" :size="12" align="center" :wrap="true">
-        <NInput
-          v-model:value="query.stockCode"
-          size="small"
-          clearable
-          :placeholder="$t('page.research.stockPlaceholder')"
-          style="width: 160px"
-          @keyup.enter="onSearch"
-        />
-        <NInput
-          v-model:value="query.keyword"
-          size="small"
-          clearable
-          :placeholder="$t('page.research.keywordPlaceholder')"
-          style="width: 200px"
-          @keyup.enter="onSearch"
-        />
-        <NInput
-          v-model:value="query.orgName"
-          size="small"
-          clearable
-          :placeholder="$t('page.research.orgPlaceholder')"
-          style="width: 160px"
-          @keyup.enter="onSearch"
-        />
-        <NSelect
-          v-model:value="query.rating"
-          size="small"
-          clearable
-          :placeholder="$t('page.research.ratingPlaceholder')"
-          :options="ratingOptions"
-          style="width: 140px"
-        />
-        <NDatePicker
-          v-model:value="query.dateRange"
-          type="daterange"
-          size="small"
-          clearable
-          :placeholder="$t('page.research.datePlaceholder')"
-        />
-        <NButton size="small" type="primary" :loading="loading" @click="onSearch">
-          {{ $t('page.research.searchBtn') }}
-        </NButton>
-      </NSpace>
-      <NDataTable
-        class="flex-1"
-        flex-height
-        remote
-        :loading="loading"
-        :columns="columns"
-        :data="records"
-        :pagination="pagination"
-        :row-key="(row: Api.Research.ResearchReportItem) => row.id"
-      />
+        <!-- ==================== 列表 Tab ==================== -->
+        <NTabPane :name="TAB_LIST" :tab="$t('page.research.tabList')">
+          <NSpace class="mb-12px" :size="12" align="center" :wrap="true">
+            <NInput
+              v-model:value="query.stockCode"
+              size="small"
+              clearable
+              :placeholder="$t('page.research.stockPlaceholder')"
+              style="width: 160px"
+              @keyup.enter="onSearch"
+            />
+            <NInput
+              v-model:value="query.keyword"
+              size="small"
+              clearable
+              :placeholder="$t('page.research.keywordPlaceholder')"
+              style="width: 200px"
+              @keyup.enter="onSearch"
+            />
+            <NInput
+              v-model:value="query.orgName"
+              size="small"
+              clearable
+              :placeholder="$t('page.research.orgPlaceholder')"
+              style="width: 160px"
+              @keyup.enter="onSearch"
+            />
+            <NSelect
+              v-model:value="query.rating"
+              size="small"
+              clearable
+              :placeholder="$t('page.research.ratingPlaceholder')"
+              :options="ratingOptions"
+              style="width: 140px"
+            />
+            <NDatePicker
+              v-model:value="query.dateRange"
+              type="daterange"
+              size="small"
+              clearable
+              :placeholder="$t('page.research.datePlaceholder')"
+            />
+            <NButton size="small" type="primary" :loading="loading" @click="onSearch">
+              {{ $t('page.research.searchBtn') }}
+            </NButton>
+          </NSpace>
+          <NDataTable
+            remote
+            flex-height
+            class="h-560px"
+            :loading="loading"
+            :columns="columns"
+            :data="records"
+            :pagination="pagination"
+            :row-key="(row: Api.Research.ResearchReportItem) => row.id"
+          />
+        </NTabPane>
+      </NTabs>
     </NCard>
   </div>
 </template>
