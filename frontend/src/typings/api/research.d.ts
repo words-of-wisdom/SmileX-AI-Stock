@@ -37,6 +37,16 @@ declare namespace Api {
       hot_orgs: NameCount[];
     }
 
+    /** 按股票分组的研报统计项 */
+    interface ResearchStockStatItem {
+      stock_code: string;
+      stock_name: string | null;
+      report_count: number;
+      positive_count: number;
+      org_count: number;
+      latest_date: string | null;
+    }
+
     /** 手动同步结果 */
     interface ResearchSyncResult {
       codes: number;

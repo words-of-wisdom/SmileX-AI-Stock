@@ -80,6 +80,17 @@ class ResearchStatsItem(BaseModel):
     hot_orgs: list[ResearchNameCount] = []
 
 
+class ResearchStockStatItem(BaseModel):
+    """按股票分组的研报统计项"""
+
+    stock_code: str
+    stock_name: Optional[str] = None
+    report_count: int
+    positive_count: int
+    org_count: int
+    latest_date: Optional[str] = None
+
+
 class ResearchSyncBody(BaseModel):
     """手动同步请求体"""
 

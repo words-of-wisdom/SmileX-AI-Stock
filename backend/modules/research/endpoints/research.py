@@ -20,6 +20,7 @@ from modules.research.schemas.research import (
     DateQuery,
     ResearchReportItem,
     ResearchStatsItem,
+    ResearchStockStatItem,
     ResearchSyncBody,
     ResearchSyncResult,
 )
@@ -76,6 +77,22 @@ async def get_research_stats(
 ):
     stats = await ResearchService.get_stats(db, days=days)
     return response_base.success(data=ResearchStatsItem.model_validate(stats))
+
+
+@research_router.get(
+    "/reports/stock-stats",
+    response_model=ResponseModel[list[ResearchStockStatItem]],
+    summary="按股票分组的研报统计（时间窗内研报数/看多评级数/机构数/最新研报日期，研报数倒序）",
+    dependencies=[Depends(require_permission("research:list"))],
+)
+async def get_research_stock_stats(
+    days: int = Query(30, ge=1, le=365),
+    stock_code: StockCodeQuery = None,
+    user=Depends(current_user),
+    db: AsyncSession = Depends(get_session),
+):
+    rows = await ResearchService.get_stock_stats(db, days=days, stock_code=stock_code)
+    return response_base.success(data=[ResearchStockStatItem.model_validate(r) for r in rows])
 
 
 @research_router.post(

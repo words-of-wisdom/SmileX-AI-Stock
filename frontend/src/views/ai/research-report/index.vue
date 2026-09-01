@@ -2,7 +2,7 @@
 /**
  * 研报中心页：券商研报采集概览（统计卡片 + 评级分布 + 热门 TOP）+ 研报列表筛选
  */
-import { computed, h, onMounted, reactive, ref } from 'vue';
+import { computed, h, onMounted, reactive, ref, watch } from 'vue';
 import {
   NButton,
   NCard,
@@ -21,6 +21,7 @@ import type { DataTableColumns, PaginationProps } from 'naive-ui';
 import {
   fetchGetResearchReports,
   fetchGetResearchStats,
+  fetchGetResearchStockStats,
   fetchSyncResearchReports
 } from '@/service/api';
 import { useAuth } from '@/hooks/business/auth';
@@ -45,6 +46,89 @@ const query = reactive({
   rating: null as string | null,
   dateRange: null as [number, number] | null
 });
+
+// ==================== 研报统计（按股票分组） ====================
+const RANGE_OPTIONS = [
+  { label: $t('page.research.range7d'), value: 7 },
+  { label: $t('page.research.range1m'), value: 30 },
+  { label: $t('page.research.range3m'), value: 90 },
+  { label: $t('page.research.range6m'), value: 180 },
+  { label: $t('page.research.range1y'), value: 365 }
+] as const;
+
+const statDays = ref(30);
+const statLoading = ref(false);
+const stockStats = ref<Api.Research.ResearchStockStatItem[]>([]);
+
+const statColumns: DataTableColumns<Api.Research.ResearchStockStatItem> = [
+  {
+    title: $t('page.research.stockCol'),
+    key: 'stock_code',
+    width: 130,
+    render: row => h('span', { class: 'font-500' }, `${row.stock_code} ${row.stock_name ?? ''}`)
+  },
+  {
+    title: $t('page.research.statReportCount'),
+    key: 'report_count',
+    width: 100,
+    sorter: 'default',
+    render: row => h('span', { class: 'text-primary font-600' }, String(row.report_count))
+  },
+  {
+    title: $t('page.research.statPositiveCount'),
+    key: 'positive_count',
+    width: 110,
+    sorter: 'default',
+    render: row =>
+      h('span', null, `${row.positive_count}（${reportCount(row) > 0 ? Math.round((row.positive_count / reportCount(row)) * 100) : 0}%）`)
+  },
+  {
+    title: $t('page.research.statOrgCount'),
+    key: 'org_count',
+    width: 100,
+    sorter: 'default'
+  },
+  {
+    title: $t('page.research.statLatestDate'),
+    key: 'latest_date',
+    width: 120,
+    sorter: 'default',
+    render: row => row.latest_date ?? '-'
+  },
+  {
+    title: $t('common.action'),
+    key: 'actions',
+    width: 80,
+    align: 'center',
+    render: row =>
+      h(
+        NButton,
+        {
+          size: 'tiny',
+          tertiary: true,
+          onClick: () => {
+            query.stockCode = row.stock_code;
+            onSearch();
+          }
+        },
+        { default: () => $t('page.research.viewReports') }
+      )
+  }
+];
+
+function reportCount(row: Api.Research.ResearchStockStatItem) {
+  return row.report_count || 0;
+}
+
+async function loadStockStats() {
+  statLoading.value = true;
+  try {
+    const { data, error } = await fetchGetResearchStockStats(statDays.value);
+    if (!error) stockStats.value = data ?? [];
+  } finally {
+    statLoading.value = false;
+  }
+}
 
 const pagination = reactive<PaginationProps>({
   page: 1,
@@ -193,8 +277,10 @@ async function onSync() {
 }
 
 onMounted(async () => {
-  await Promise.all([loadStats(), loadData()]);
+  await Promise.all([loadStats(), loadStockStats(), loadData()]);
 });
+
+watch(statDays, () => loadStockStats());
 </script>
 
 <template>
@@ -274,6 +360,38 @@ onMounted(async () => {
           </div>
         </div>
       </div>
+    </NCard>
+
+    <!-- 研报统计（按股票分组） -->
+    <NCard :bordered="false" size="small" class="card-wrapper">
+      <template #header>
+        <div class="flex-y-center gap-8px">
+          <span class="text-16px font-500">{{ $t('page.research.statTitle') }}</span>
+          <NText depth="3" class="text-12px">{{ $t('page.research.statSubtitle') }}</NText>
+        </div>
+      </template>
+      <template #header-extra>
+        <NSpace :size="4" align="center">
+          <NButton
+            v-for="opt in RANGE_OPTIONS"
+            :key="opt.value"
+            size="tiny"
+            :type="statDays === opt.value ? 'primary' : 'default'"
+            secondary
+            @click="statDays = opt.value"
+          >
+            {{ opt.label }}
+          </NButton>
+        </NSpace>
+      </template>
+      <NDataTable
+        :loading="statLoading"
+        :columns="statColumns"
+        :data="stockStats"
+        size="small"
+        :max-height="360"
+        :row-key="(row: Api.Research.ResearchStockStatItem) => row.stock_code"
+      />
     </NCard>
 
     <!-- 研报列表 -->

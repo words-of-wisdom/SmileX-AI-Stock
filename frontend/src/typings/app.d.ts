@@ -1536,6 +1536,18 @@ declare namespace App {
           ratingPlaceholder: string;
           datePlaceholder: string;
           searchBtn: string;
+          statTitle: string;
+          statSubtitle: string;
+          range7d: string;
+          range1m: string;
+          range3m: string;
+          range6m: string;
+          range1y: string;
+          statReportCount: string;
+          statPositiveCount: string;
+          statOrgCount: string;
+          statLatestDate: string;
+          viewReports: string;
         };
         financial: {
           title: string;

@@ -1617,7 +1617,19 @@ const local: App.I18n.Schema = {
       orgPlaceholder: '机构名称',
       ratingPlaceholder: '评级',
       datePlaceholder: '发布日期区间',
-      searchBtn: '查询'
+      searchBtn: '查询',
+      statTitle: '研报统计',
+      statSubtitle: '按股票分组统计时间窗内研报覆盖与看多评级占比',
+      range7d: '7天',
+      range1m: '1月',
+      range3m: '3月',
+      range6m: '半年',
+      range1y: '1年',
+      statReportCount: '研报数',
+      statPositiveCount: '看多评级数(买入/增持)',
+      statOrgCount: '机构数',
+      statLatestDate: '最新研报日期',
+      viewReports: '查看研报'
     },
   },
   form: {

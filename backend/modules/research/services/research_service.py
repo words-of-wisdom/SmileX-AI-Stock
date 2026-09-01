@@ -11,7 +11,7 @@
 import logging
 from datetime import date, timedelta
 
-from sqlalchemy import select, func
+from sqlalchemy import select, func, case
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database.models.business.research import BusinessResearchReport
@@ -173,6 +173,49 @@ class ResearchService:
             "hot_stocks": await _top(BusinessResearchReport.stock_code),
             "hot_orgs": await _top(BusinessResearchReport.org_name),
         }
+
+    @staticmethod
+    async def get_stock_stats(
+        db: AsyncSession, days: int, stock_code: str = None,
+    ) -> list[dict]:
+        """按股票分组的研报统计（时间窗内）：研报数/看多评级数/机构数/最新研报日期"""
+        since = (timezone.now() - timedelta(days=days)).date()
+        positive = case(
+            (BusinessResearchReport.rating.in_(("买入", "增持", "推荐", "强烈推荐", "优于大市")), 1),
+            else_=0,
+        )
+        conditions = [
+            BusinessResearchReport.deleted_at.is_(None),
+            BusinessResearchReport.published_date >= since,
+        ]
+        if stock_code:
+            conditions.append(BusinessResearchReport.stock_code == stock_code)
+
+        result = await db.execute(
+            select(
+                BusinessResearchReport.stock_code,
+                func.max(BusinessResearchReport.stock_name),
+                func.count().label("report_count"),
+                func.sum(positive).label("positive_count"),
+                func.count(func.distinct(BusinessResearchReport.org_name)).label("org_count"),
+                func.max(BusinessResearchReport.published_date).label("latest_date"),
+            )
+            .where(*conditions)
+            .group_by(BusinessResearchReport.stock_code)
+            .order_by(func.count().desc())
+        )
+        rows = result.all()  # Result 只能消费一次，先物化
+        return [
+            {
+                "stock_code": r[0],
+                "stock_name": r[1],
+                "report_count": r[2],
+                "positive_count": int(r[3] or 0),
+                "org_count": r[4],
+                "latest_date": r[5].isoformat() if r[5] else None,
+            }
+            for r in rows
+        ]
 
     @staticmethod
     async def collect_sync_codes(db: AsyncSession) -> list[str]:

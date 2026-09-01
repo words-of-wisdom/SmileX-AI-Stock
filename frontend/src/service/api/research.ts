@@ -29,6 +29,15 @@ export function fetchGetResearchStats(days = 30) {
   });
 }
 
+/** research report stats grouped by stock within a time window */
+export function fetchGetResearchStockStats(days: number, stockCode?: string) {
+  return request<Api.Research.ResearchStockStatItem[]>({
+    url: '/admin/research/reports/stock-stats',
+    method: 'get',
+    params: { days, stock_code: stockCode || undefined }
+  });
+}
+
 /** manually trigger research report sync (optional stock codes) */
 export function fetchSyncResearchReports(stockCodes: string[] = []) {
   return request<Api.Research.ResearchSyncResult>({

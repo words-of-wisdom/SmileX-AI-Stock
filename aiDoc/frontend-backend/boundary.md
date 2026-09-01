@@ -379,3 +379,4 @@ METHOD \n PATH \n timestamp \n nonce \n app_id \n sha256(body).hexdigest()
 - `GET /admin/stock/limit-up/list` 的 `LimitUpStockItem` 新增 `continuation_probability: 0-100` 与 `continuation_factors: [{type, value}]`（读时按封板质量启发式计算不入库，历史日期同样可用；**规则评分非模型预测**）
 - 因子 `type` 枚举：`consecutive`（连板高度）/`seal_ratio`（封成比=封单÷成交额）/`break_count`（炸板次数）/`first_seal`（首封时间，原始字符串 `HHMMSS`）/`turnover_rate`（换手率%）；`value` 缺失为 null，前端按 i18n 模板渲染（`page.aStock.limitUp.factor*`）
 - 前端：`views/a-stock/industry-board`（领涨股列前三 + flex-height 滚动修复）、`views/a-stock/limit-up`（连板概率列 NTag 高≥65/中40-65/低<40 + NTooltip 因子明细）
+- **研报统计（按股票分组）**：`GET /research/reports/stock-stats?days=1..365&stock_code`（研报数/看多评级数(买入/增持/推荐/强烈推荐/优于大市)/机构数/最新研报日期，研报数倒序）；前端研报中心页含快捷时间窗（7天/1月/3月/半年/1年 → days=7/30/90/180/365），表格列可排序，行内「查看研报」联动下方列表筛选

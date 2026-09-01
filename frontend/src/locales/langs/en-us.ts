@@ -1620,7 +1620,19 @@ const local: App.I18n.Schema = {
       orgPlaceholder: 'Broker name',
       ratingPlaceholder: 'Rating',
       datePlaceholder: 'Published date range',
-      searchBtn: 'Search'
+      searchBtn: 'Search',
+      statTitle: 'Report Statistics',
+      statSubtitle: 'Per-stock coverage and positive rating ratio within the window',
+      range7d: '7D',
+      range1m: '1M',
+      range3m: '3M',
+      range6m: '6M',
+      range1y: '1Y',
+      statReportCount: 'Reports',
+      statPositiveCount: 'Positive (Buy/Add)',
+      statOrgCount: 'Brokers',
+      statLatestDate: 'Latest Report',
+      viewReports: 'View Reports'
     },
   },
   form: {
