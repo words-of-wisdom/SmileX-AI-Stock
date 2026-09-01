@@ -1589,7 +1589,8 @@ const local: App.I18n.Schema = {
       forecastLabel: '下期预测',
       highlightsLabel: '核心亮点',
       risksLabel: '风险点',
-      emptyTip: '暂无解读记录，输入股票代码点击「AI 解读」开始'
+      emptyTip: '暂无解读记录，输入股票代码点击「AI 解读」开始',
+      drawerLoading: '加载解读详情中…'
     },
     research: {
       title: '券商研报中心',

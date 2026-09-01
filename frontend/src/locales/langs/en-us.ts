@@ -1592,7 +1592,8 @@ const local: App.I18n.Schema = {
       forecastLabel: 'Next Period Forecast',
       highlightsLabel: 'Highlights',
       risksLabel: 'Risks',
-      emptyTip: 'No interpretation yet, enter a stock code and click "AI Interpret"'
+      emptyTip: 'No interpretation yet, enter a stock code and click "AI Interpret"',
+      drawerLoading: 'Loading interpretation detail...'
     },
     research: {
       title: 'Research Reports',

@@ -1537,6 +1537,26 @@ declare namespace App {
           datePlaceholder: string;
           searchBtn: string;
         };
+        financial: {
+          title: string;
+          subtitle: string;
+          codePlaceholder: string;
+          codeInvalid: string;
+          queryBtn: string;
+          interpretBtn: string;
+          interpretSubmitted: string;
+          reportTitle: string;
+          metricsTitle: string;
+          historyTitle: string;
+          stockCol: string;
+          periodCol: string;
+          ratingLabel: string;
+          forecastLabel: string;
+          highlightsLabel: string;
+          risksLabel: string;
+          emptyTip: string;
+          drawerLoading: string;
+        };
       aiStrategy: {
         tabStrategies: string;
         tabPositions: string;

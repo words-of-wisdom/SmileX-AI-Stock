@@ -10,6 +10,8 @@ import {
   NDataTable,
   NDescriptions,
   NDescriptionsItem,
+  NDrawer,
+  NDrawerContent,
   NEmpty,
   NInput,
   NPagination,
@@ -145,15 +147,37 @@ function onHistoryPageChange(page: number) {
 }
 
 async function viewHistoryRow(row: Api.Financial.FinancialInterpretItem) {
-  const { data, error } = await fetchGetFinancialInterpretationDetail(row.id);
-  if (!error && data) {
-    current.value = data;
-    stockCode.value = data.stock_code;
-    stockInput.value = data.stock_code;
-    stopPoll();
-    await loadReports(data.stock_code);
+  // 右侧抽屉查看详情，不替换上方查询结果
+  drawerShow.value = true;
+  drawerDetail.value = null;
+  drawerLoading.value = true;
+  try {
+    const { data, error } = await fetchGetFinancialInterpretationDetail(row.id);
+    if (!error) {
+      drawerDetail.value = data;
+      return;
+    }
+    drawerShow.value = false;
+  } finally {
+    drawerLoading.value = false;
   }
 }
+
+// ==================== 详情抽屉 ====================
+const drawerShow = ref(false);
+const drawerDetail = ref<Api.Financial.FinancialInterpretDetail | null>(null);
+const drawerLoading = ref(false);
+
+const drawerParsed = computed(() => drawerDetail.value?.parsed_result ?? null);
+
+const drawerMarkdown = computed(() => {
+  const raw = drawerDetail.value?.ai_raw_response ?? '';
+  const stripped = raw
+    .replace(/```json\s*\{[\s\S]*?\}\s*```/, '')
+    .replace(/<think>[\s\S]*?<\/think>/, '')
+    .trim();
+  return md.render(stripped);
+});
 
 const TRIGGER_LABEL: Record<string, string> = {
   schedule: $t('page.aiAnalysis.triggerSchedule'),
@@ -393,6 +417,71 @@ onBeforeUnmount(stopPoll);
         />
       </div>
     </NCard>
+
+    <!-- 历史详情抽屉（右侧） -->
+    <NDrawer v-model:show="drawerShow" :width="560" placement="right">
+      <NDrawerContent
+        :title="`${drawerDetail?.stock_code ?? ''} ${drawerDetail?.stock_name ?? ''}`.trim() || $t('page.financial.reportTitle')"
+        closable
+      >
+        <div v-if="drawerLoading" class="py-48px text-center">
+          <NText depth="3">{{ $t('page.financial.drawerLoading') }}</NText>
+        </div>
+
+        <!-- 生成中 -->
+        <div v-else-if="drawerDetail?.status === 'running'" class="flex-col items-center gap-12px py-48px">
+          <icon-mdi-robot-excited class="text-48px" style="color: var(--primary-color)" />
+          <NText depth="3">{{ $t('page.aiAnalysis.generatingTip') }}</NText>
+        </div>
+
+        <!-- 失败 -->
+        <div v-else-if="drawerDetail?.status === 'failed'" class="py-24px">
+          <NEmpty :description="$t('page.aiAnalysis.failedTip')">
+            <template #icon><icon-mdi-alert-circle-outline class="text-48px" style="color: #e0a240" /></template>
+            <template #extra>
+              <NText type="error" class="text-12px">{{ drawerDetail.error_msg }}</NText>
+            </template>
+          </NEmpty>
+        </div>
+
+        <!-- 成功解读 -->
+        <template v-else-if="drawerDetail?.status === 'success' && drawerDetail.ai_raw_response">
+          <NDescriptions v-if="drawerParsed" label-placement="left" :column="1" size="small" bordered class="mb-12px">
+            <NDescriptionsItem :label="$t('page.financial.periodCol')">
+              {{ drawerDetail.report_period ?? '-' }}
+            </NDescriptionsItem>
+            <NDescriptionsItem :label="$t('page.financial.ratingLabel')">
+              <NTag :type="ratingType(drawerParsed.quality_rating)" size="small">
+                {{ drawerParsed.quality_rating ?? '-' }}
+              </NTag>
+            </NDescriptionsItem>
+            <NDescriptionsItem :label="$t('page.financial.forecastLabel')">
+              <NSpace align="center" :size="8">
+                <NTag :type="forecastType(drawerParsed.forecast?.direction)" size="small" :bordered="false">
+                  {{ drawerParsed.forecast?.direction || '-' }}
+                </NTag>
+                <NText depth="2" class="text-13px">{{ drawerParsed.forecast?.summary || '' }}</NText>
+              </NSpace>
+            </NDescriptionsItem>
+          </NDescriptions>
+          <div v-if="drawerParsed?.highlights?.length" class="mb-12px">
+            <NText class="mb-4px block text-13px font-500">{{ $t('page.financial.highlightsLabel') }}</NText>
+            <ul class="m-0 pl-20px">
+              <li v-for="(p, i) in drawerParsed.highlights" :key="i" class="text-13px leading-22px">{{ p }}</li>
+            </ul>
+          </div>
+          <div v-if="drawerParsed?.risks?.length" class="mb-12px">
+            <NText class="mb-4px block text-13px font-500">{{ $t('page.financial.risksLabel') }}</NText>
+            <ul class="m-0 pl-20px">
+              <li v-for="(p, i) in drawerParsed.risks" :key="i" class="text-13px leading-22px">{{ p }}</li>
+            </ul>
+          </div>
+          <div class="analysis-markdown text-13px" v-html="drawerMarkdown" />
+        </template>
+
+        <NEmpty v-else class="py-48px" :description="$t('page.financial.emptyTip')" />
+      </NDrawerContent>
+    </NDrawer>
   </div>
 </template>
 
