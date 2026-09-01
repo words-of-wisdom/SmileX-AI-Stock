@@ -13,6 +13,8 @@ declare namespace Api {
     /** 财报解读结构化摘要（parsed_result） */
     export interface FinancialParsedResult {
       quality_rating?: string;
+      /** 下一报告期预测评级：优秀 / 良好 / 一般 / 较差 */
+      next_quality_rating?: string;
       highlights?: string[];
       risks?: string[];
       forecast?: {

@@ -1551,6 +1551,7 @@ declare namespace App {
           stockCol: string;
           periodCol: string;
           ratingLabel: string;
+          nextRatingLabel: string;
           forecastLabel: string;
           highlightsLabel: string;
           risksLabel: string;

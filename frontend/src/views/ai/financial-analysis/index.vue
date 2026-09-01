@@ -353,6 +353,11 @@ onBeforeUnmount(stopPoll);
               {{ parsed.quality_rating ?? '-' }}
             </NTag>
           </NDescriptionsItem>
+          <NDescriptionsItem :label="$t('page.financial.nextRatingLabel')">
+            <NTag :type="ratingType(parsed.next_quality_rating)" size="small" :bordered="false">
+              {{ parsed.next_quality_rating ?? '-' }}
+            </NTag>
+          </NDescriptionsItem>
           <NDescriptionsItem :label="$t('page.financial.forecastLabel')">
             <NSpace align="center" :size="8">
               <NTag :type="forecastType(parsed.forecast?.direction)" size="small" :bordered="false">
@@ -453,6 +458,11 @@ onBeforeUnmount(stopPoll);
             <NDescriptionsItem :label="$t('page.financial.ratingLabel')">
               <NTag :type="ratingType(drawerParsed.quality_rating)" size="small">
                 {{ drawerParsed.quality_rating ?? '-' }}
+              </NTag>
+            </NDescriptionsItem>
+            <NDescriptionsItem :label="$t('page.financial.nextRatingLabel')">
+              <NTag :type="ratingType(drawerParsed.next_quality_rating)" size="small" :bordered="false">
+                {{ drawerParsed.next_quality_rating ?? '-' }}
               </NTag>
             </NDescriptionsItem>
             <NDescriptionsItem :label="$t('page.financial.forecastLabel')">

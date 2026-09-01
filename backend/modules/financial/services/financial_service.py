@@ -41,7 +41,8 @@ _FINANCIAL_SYSTEM_PROMPT = """你是 SmileX-AI-Stock 平台的 AI 财报分析�
 1. 先输出一个 JSON 对象（包在 ```json 代码块中）：
 ```json
 {
-  "quality_rating": "良好",           // 财报质量评级：优秀 / 良好 / 一般 / 较差
+  "quality_rating": "良好",           // 本期财报质量评级：优秀 / 良好 / 一般 / 较差
+  "next_quality_rating": "良好",      // 下一报告期预测评级：优秀 / 良好 / 一般 / 较差（基于趋势预判）
   "highlights": ["亮点1", "亮点2"],   // 2-4 条核心亮点
   "risks": ["风险1", "风险2"],        // 2-4 条风险点
   "forecast": {
